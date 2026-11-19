@@ -3,7 +3,7 @@ import "./App.css";
 import ReactLenis from "lenis/react";
 import RippleBackground from "./RippleBackground.jsx";
 import SkiperText from "./SkiperText.jsx";
-import Ledger, { API } from "./components/Ledger.jsx";
+import Ledger from "./components/Ledger.jsx";
 import GraphView from "./components/GraphView.jsx";
 import { TimelineView, MapView } from "./components/TimeMap.jsx";
 import timeline from "./timeline.json";
@@ -15,7 +15,7 @@ import BeeScroll from "./components/BeeScroll.jsx";
 import "./effects.css";
 import TiltCard from "./components/TiltCard.jsx";
 const TABS = ["dashboard", "graph", "timeline", "map"];
-// const API = import.meta.env.VITE_API_URL || "http://localhost:8001";
+const API = import.meta.env.VITE_API_URL || "http://localhost:8001";
 export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [file, setFile] = useState(null);
