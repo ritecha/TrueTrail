@@ -50,7 +50,31 @@ export default function App() {
             <p className="sub">EVIDENCE ENGINE</p>
             <div className="ingest-box">
               <h4>INGEST EVIDENCE</h4>
-              <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+              <div style={{ marginBottom: "15px" }}>
+                <input
+                  type="file"
+                  id="file-upload"
+                  onChange={(e) => setFile(e.target.files[0])}
+                  style={{ display: "none" }} // Default button chupa diya
+                />
+                <label
+                  htmlFor="file-upload"
+                  className="neon-btn"
+                  style={{
+                    display: "block",
+                    textAlign: "center",
+                    cursor: "pointer",
+                    padding: "12px",
+                    border: "1px dashed rgba(255,255,255,0.2)",
+                    borderRadius: "8px",
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  {file
+                    ? `Selected: ${file.name.substring(0, 15)}...`
+                    : "📁 Choose Evidence File"}
+                </label>
+              </div>
               <button className="neon-btn" onClick={upload}>
                 Upload & Hash
               </button>
