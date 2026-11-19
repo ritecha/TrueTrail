@@ -21,3 +21,9 @@ data/runtime/
 .vscode/
 .DS_Store
 Thumbs.db
+node_modules/
+.venv/
+__pycache__/
+dist/
+.vercel/
+.env

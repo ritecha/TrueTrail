@@ -8,10 +8,11 @@ from report import generate_report  # Report function import
 
 app = FastAPI()
 
-# ✅ CORS FIX: Frontend (5173) ko Backend (8001) se baat karne ki permission
+# CORS 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"], # Vite ports
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origin_regex=r"https://.*\.vercel\.app", 
     allow_methods=["*"],
     allow_headers=["*"],
 )

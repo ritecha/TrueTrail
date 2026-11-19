@@ -28,3 +28,10 @@ node_modules/
 __pycache__/
 *.db
 backend/evidence/
+.vercel
+node_modules/
+
+
+dist/
+.vercel/
+.env
