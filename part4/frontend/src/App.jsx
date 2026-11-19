@@ -50,6 +50,7 @@ export default function App() {
             <p className="sub">EVIDENCE ENGINE</p>
             <div className="ingest-box">
               <h4>INGEST EVIDENCE</h4>
+
               <div style={{ marginBottom: "15px" }}>
                 <input
                   type="file"
@@ -75,6 +76,7 @@ export default function App() {
                     : "📁 Choose Evidence File"}
                 </label>
               </div>
+
               <button className="neon-btn" onClick={upload}>
                 Upload & Hash
               </button>
