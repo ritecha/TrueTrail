@@ -9,3 +9,5 @@ __pycache__/
 dist/
 .vercel/
 .env
+case_notes.db
+__pycache__

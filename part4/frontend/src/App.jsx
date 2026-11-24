@@ -14,7 +14,11 @@ import engineGraph from "./engineGraph.json";
 import BeeScroll from "./components/BeeScroll.jsx";
 import "./effects.css";
 import TiltCard from "./components/TiltCard.jsx";
-const TABS = ["dashboard", "graph", "timeline", "map"];
+import AgentChat from "./components/AgentChat.jsx";
+import "./agent.css";
+
+const TABS = ["dashboard", "graph", "timeline", "map", "agent"];
+
 // const API = import.meta.env.VITE_API_URL || "http://localhost:8001";
 const API = "https://digitalevidencebytruetrail-backend.onrender.com";
 export default function App() {
@@ -117,6 +121,7 @@ export default function App() {
         )}
         {tab === "timeline" && <TimelineView data={timeline} />}
         {tab === "map" && <MapView data={timeline} />}
+        {tab === "agent" && <AgentChat />}
       </div>
     </ReactLenis>
   );

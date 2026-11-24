@@ -3,4 +3,6 @@ uvicorn
 python-multipart
 reportlab
 requests
+openai
+python-dotenv
 pydantic

@@ -3,11 +3,12 @@ import shutil
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from integrity import sha256_file, log_event, verify_chain, _conn
-from report import generate_report  # Report function import
-
+from agent import router as agent_router
+import os
 app = FastAPI()
-
+app.include_router(agent_router)
+from dotenv import load_dotenv
+load_dotenv()
 # CORS 
 app.add_middleware(
     CORSMiddleware,
