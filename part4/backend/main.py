@@ -8,8 +8,11 @@ from integrity import sha256_file, log_event, _conn, verify_chain
 from report import generate_report
 from dotenv import load_dotenv
 
-# ✅ Manya ka function import kar
+# ✅ Manya ka code
 from truetrail.timeline import build_timeline
+
+# ✅ Jaya ka code (App mount karne ke liye)
+from app.main import app as jaya_app
 
 app = FastAPI()
 app.include_router(agent_router)
@@ -53,20 +56,21 @@ def audit():
 def audit_verify():
     return verify_chain()
 
-# ✅ PDF REPORT ENDPOINT
 @app.post("/report")
 def create_report(file_name: str, file_hash: str, case_id: str):
     path = generate_report(file_name, file_hash, case_id, "Investigating Officer")
     return FileResponse(path, media_type="application/pdf", filename=f"BSA_{case_id}.pdf")
 
-# ==========================================
-# ✅ MANYA KA TIMELINE ENDPOINT
-# ==========================================
 @app.get("/api/timeline")
 def get_manya_timeline():
     try:
-        # Yeh call hote hi Manya ka pura pipeline chalega
         timeline_data = build_timeline()
         return {"status": "success", "data": timeline_data}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# ==========================================
+# ✅ JAYA KA CODE MOUNT KAR DIYA
+# ==========================================
+# Isse Jaya ke saare endpoints /jaya/... ke through access honge
+app.mount("/jaya", jaya_app)
