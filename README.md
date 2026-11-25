@@ -347,10 +347,7 @@ Additional auditing, verification, and graph evaluation scripts can be executed 
 - Model predictions indicate suspicious patterns and should not be treated as confirmed fraud.
 - Real-world deployment would require validation on representative, securely handled financial data.
 
-## 15. Conclusion
-
-The project demonstrates a multi-model machine learning approach to suspicious transaction detection. It combines transaction-level fraud classification, sender and receiver mule identification, developing-chain detection, feature engineering, data validation, model evaluation, and SHAP-based explainability.
-## 16. Glossary and Acronyms
+## 15. Glossary and Acronyms
 
 ### Acronyms
 
@@ -405,5 +402,7 @@ The project demonstrates a multi-model machine learning approach to suspicious t
 | Fan-out | Number of outgoing connections from an account or node. |
 | Cycle | A path in a graph that returns to a previously visited node. |
 | Joblib | A Python library used to save and load machine learning objects. |
+## 16. Conclusion
 
+The project demonstrates a multi-model machine learning approach to suspicious transaction detection. It combines transaction-level fraud classification, sender and receiver mule identification, developing-chain detection, feature engineering, data validation, model evaluation, and SHAP-based explainability.
 By integrating these components, the prototype provides a foundation for analyzing suspicious financial transaction patterns and further experimentation with validated real-world datasets.
