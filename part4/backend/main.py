@@ -3,11 +3,15 @@ import shutil
 import sys
 
 # ==========================================
-# ✅ JAYA KE IMPORT FIX (Sabse pehle aayega)
+# ✅ SABSE PEHLE PATHS SET KARO (Imports se pehle)
 # ==========================================
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, current_dir)
-sys.path.insert(0, os.path.join(current_dir, "app"))
+# Tere backend ka root folder
+sys.path.insert(0, current_dir)          
+# Jaya ka app folder (jahan uska main.py aur config.py hona chahiye)
+sys.path.insert(0, os.path.join(current_dir, "app")) 
+# Manya ka truetrail folder (jahan uska config.py hai)
+sys.path.insert(0, os.path.join(current_dir, "truetrail")) 
 
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +24,7 @@ from dotenv import load_dotenv
 # ✅ Manya ka code
 from truetrail.timeline import build_timeline
 
-# ✅ Jaya ka code (Ab yeh path milne ke baad chalega)
+# ✅ Jaya ka code (Ab yeh bina error ke load hoga)
 from app.main import app as jaya_app
 
 app = FastAPI()
@@ -37,12 +41,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-os.makedirs("evidence", exist_ok=True)
-os.makedirs("data", exist_ok=True) 
+# ✅ Sirf 'data' folder bana rahe hain, 'evidence' hata diya
+os.makedirs("data", exist_ok=True)
 
 @app.post("/evidence/upload")
 async def upload(file: UploadFile = File(...), actor: str = "investigator"):
-    path = f"evidence/{file.filename}"
+    # Purana local data disconnect karne ke liye ab naya upload 'data' folder mein jayega
+    path = f"data/{file.filename}"
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
     h = sha256_file(path)
@@ -51,7 +56,10 @@ async def upload(file: UploadFile = File(...), actor: str = "investigator"):
 
 @app.get("/evidence/{name}/verify")
 def verify(name: str):
-    h = sha256_file(f"evidence/{name}")
+    path = f"data/{name}"
+    if not os.path.exists(path):
+        return {"error": "File not found"}
+    h = sha256_file(path)
     row = _conn().execute("SELECT file_hash FROM audit WHERE file_name=? AND action='INGEST' "
                           "ORDER BY id LIMIT 1", (name,)).fetchone()
     log_event("investigator", "VERIFY", name, h)
