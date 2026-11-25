@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -7,13 +8,14 @@ from agent import router as agent_router
 from integrity import sha256_file, log_event, _conn, verify_chain
 from report import generate_report
 from dotenv import load_dotenv
+os.makedirs("data", exist_ok=True)  # Jaya ke FORENSIC_DATA_DIR ke liye
 
 # ✅ Manya ka code
 from truetrail.timeline import build_timeline
 
 # ✅ Jaya ka code (App mount karne ke liye)
 from app.main import app as jaya_app
-
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "app"))
 app = FastAPI()
 app.include_router(agent_router)
 
