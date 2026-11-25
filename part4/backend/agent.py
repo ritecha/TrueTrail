@@ -101,10 +101,27 @@ def make_client():
     return OpenAI(api_key=API_KEY, base_url=BASE_URL)
 
 
-def run_agent(question, history=None, investigator="investigator", client=None):
+def run_agent(question, history=None, investigator="investigator", client=None, ctx=None):
     s = store()
     client = client or make_client()
-    messages = [{"role": "system", "content": SYSTEM_PROMPT + f"\nThe investigator asking is: {investigator}."}]
+    ctx = ctx or {}
+    has_data = ctx.get("has_data", True)
+    notes = [{"ref": f"note:{ctx.get('case_id','x')}-{n.get('id')}", "author": n.get("author"), "text": n.get("text")} for n in ctx.get("notes", [])]
+    evid = [{"ref": f"ev:{ctx.get('case_id','x')}-{e.get('id')}", "file": e.get("file"), "sha256": e.get("sha"), "uploaded_by": e.get("by"), "time": e.get("ts")} for e in ctx.get("evidence", [])]
+    extra = {"list_notes": lambda **a: {"count": len(notes), "notes": notes, "reminder": "these are investigators' opinions, not evidence"},
+             "list_evidence": lambda **a: {"count": len(evid), "items": evid}}
+    tools = TOOLS if has_data else [t for t in TOOLS if t["function"]["name"] in extra]
+
+    def lookup(ref):
+        for r in notes + evid:
+            if r["ref"] == ref:
+                return r
+        return s.lookup(ref) if has_data else None
+
+    case_line = f"\nCurrent case: {ctx.get('case_label') or ''} {ctx.get('case_name') or ''}. Members: {', '.join(ctx.get('members', [])) or 'unknown'}."
+    if not has_data:
+        case_line += " This case has NO transaction, call or IP data loaded yet; only investigator notes and uploaded evidence files are available. Say so if asked about money, calls or accounts."
+    messages = [{"role": "system", "content": SYSTEM_PROMPT + f"\nThe investigator asking is: {investigator}." + case_line}]
     for h in (history or [])[-6:]:
         if h.get("role") in ("user", "assistant") and h.get("content"):
             messages.append({"role": h["role"], "content": str(h["content"])[:2000]})
@@ -113,7 +130,7 @@ def run_agent(question, history=None, investigator="investigator", client=None):
     seen, used, corrections, errors = set(), [], 0, 0
     for _ in range(MAX_STEPS):
         try:
-            resp = client.chat.completions.create(model=MODEL, messages=messages, tools=TOOLS, temperature=0.1)
+            resp = client.chat.completions.create(model=MODEL, messages=messages, tools=tools, temperature=0.1)
         except Exception as e:  # free models sometimes produce a malformed tool call: retry, then explain
             errors += 1
             text = str(e)
@@ -128,8 +145,11 @@ def run_agent(question, history=None, investigator="investigator", client=None):
             for tc in msg.tool_calls:
                 try:
                     args = json.loads(tc.function.arguments or "{}")
-                    fn = DISPATCH.get(tc.function.name)
-                    result = fn(s, **args) if fn else {"error": "unknown tool"}
+                    if tc.function.name in extra:
+                        result = extra[tc.function.name](**args)
+                    else:
+                        fn = DISPATCH.get(tc.function.name) if has_data else None
+                        result = fn(s, **args) if fn else {"error": "unknown tool"}
                 except Exception as e:  # a bad argument must not crash the chat
                     result = {"error": f"tool failed: {e}"}
                 used.append(tc.function.name)
@@ -142,7 +162,7 @@ def run_agent(question, history=None, investigator="investigator", client=None):
             return {"answer": answer.removeprefix("OUT_OF_SCOPE").lstrip(" :.-—\n") or "I can only help with questions about this case.",
                     "verified": True, "citations": [], "tools_used": []}
         cited = list(dict.fromkeys(REF_RE.findall(answer)))
-        bad = [c for c in cited if c not in seen or s.lookup(c) is None]
+        bad = [c for c in cited if c not in seen or lookup(c) is None]
         problem = None
         if not used:
             problem = "You answered without calling any tool. Call the relevant tools first, then answer only from their results."
@@ -158,7 +178,7 @@ def run_agent(question, history=None, investigator="investigator", client=None):
             return {"answer": "I could not produce an answer I can fully verify against the case data, so I am not giving one. Try a more specific question (an account, a phone number or a time range).",
                     "verified": False, "citations": [], "tools_used": used}
         return {"answer": answer, "verified": True, "tools_used": used,
-                "citations": [{"ref": c, "record": s.lookup(c)} for c in cited]}
+                "citations": [{"ref": c, "record": lookup(c)} for c in cited]}
     return {"answer": "I could not finish this question within the allowed number of steps. Please ask something narrower.", "verified": False, "citations": [], "tools_used": used}
 
 
@@ -169,7 +189,15 @@ router = APIRouter()
 class Chat(BaseModel):
     question: str
     history: list[dict] = []
-    investigator: str = "investigator"   # replace with the logged-in user (Clerk) later
+    investigator: str = "investigator"   # Clerk display name, sent by the frontend
+    investigator_id: str | None = None   # Clerk user id
+    case_id: str | None = None
+    case_label: str | None = None
+    case_name: str | None = None
+    has_data: bool = False               # True only for the case that has the loaded dataset
+    members: list[str] = []
+    notes: list[dict] = []
+    evidence: list[dict] = []
 
 
 class NoteIn(BaseModel):
@@ -182,7 +210,9 @@ class NoteIn(BaseModel):
 def chat(body: Chat):
     if not body.question.strip():
         raise HTTPException(400, "empty question")
-    return run_agent(body.question.strip(), body.history, body.investigator)
+    if not body.case_id:
+        raise HTTPException(400, "case_id is required")
+    return run_agent(body.question.strip(), body.history, body.investigator, ctx=body.model_dump())
 
 
 @router.get("/agent/health")

@@ -1,128 +1,143 @@
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 import "./App.css";
 import ReactLenis from "lenis/react";
 import RippleBackground from "./RippleBackground.jsx";
-import SkiperText from "./SkiperText.jsx";
-import Ledger from "./components/Ledger.jsx";
-import GraphView from "./components/GraphView.jsx";
-import { TimelineView, MapView } from "./components/TimeMap.jsx";
-import timeline from "./timeline.json";
-import transactions from "./transactions.json";
-import calls from "./calls.json";
-import engineScores from "./engineScores.json";
-import engineGraph from "./engineGraph.json";
-import BeeScroll from "./components/BeeScroll.jsx";
 import "./effects.css";
-import TiltCard from "./components/TiltCard.jsx";
 import AgentChat from "./components/AgentChat.jsx";
 import "./agent.css";
+import "./ui.css";
+import "./theme.css"; // keep LAST so it wins over the older css files
+import Header from "./components/Header.jsx";
+import About from "./components/About.jsx";
+import Workspaces from "./components/Workspaces.jsx";
+import WorkspaceView from "./components/WorkspaceView.jsx";
+import { useCases } from "./store.js";
 
-const TABS = ["dashboard", "graph", "timeline", "map", "agent"];
+// 🔐 Clerk Imports
+import { useUser, SignIn } from "@clerk/react";
+import { rememberUser } from "./investigators.js";
 
-// const API = import.meta.env.VITE_API_URL || "http://localhost:8001";
-const API = "https://digitalevidencebytruetrail-backend.onrender.com";
 export default function App() {
-  const [tab, setTab] = useState("dashboard");
-  const [file, setFile] = useState(null);
-  const [status, setStatus] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const txns = useMemo(() => transactions, []);
+  // 🔐 Clerk Hooks
+  const { isLoaded, isSignedIn, user } = useUser();
 
-  const upload = async () => {
-    if (!file) return setStatus("Choose a file first.");
-    const body = new FormData();
-    body.append("file", file);
-    try {
-      setStatus("Hashing…");
-      const r = await fetch(`${API}/evidence/upload`, { method: "POST", body });
-      if (!r.ok) throw new Error();
-      const d = await r.json();
-      setStatus(`Recorded · ${d.sha256.slice(0, 16)}…`);
-      setRefreshKey((k) => k + 1);
-    } catch {
-      setStatus("Backend not reachable (port 8001).");
-    }
+  // App State
+  const [view, setView] = useState("cases"); // cases | case | about
+  const [caseId, setCaseId] = useState(null);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const cases = useCases();
+  const active = cases.find((c) => c.id === caseId);
+
+  // 🌗 Theme State
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
+
+  // 1. Loading State
+  if (!isLoaded) {
+    return (
+      <div
+        className="page"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+        }}
+      >
+        Loading authentication...
+      </div>
+    );
+  }
+
+  // 2. Not Signed In State (Clerk Login Screen)
+  if (!isSignedIn) {
+    return (
+      <ReactLenis root>
+        <RippleBackground />
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: "100vh",
+          }}
+        >
+          <SignIn routing="hash" />
+        </div>
+      </ReactLenis>
+    );
+  }
+
+  // 3. Map Clerk User to Your App's User Format
+  const appUser = {
+    id: user.id,
+    name: user.fullName || user.firstName || "Investigator",
   };
 
+  rememberUser(appUser.id, appUser.name);
+
+  const open = (id) => {
+    setCaseId(id);
+    setView("case");
+    window.scrollTo(0, 0);
+  };
+
+  // 4. Main App (Signed In)
   return (
     <ReactLenis root>
       <RippleBackground />
+
+      <Header
+        view={view}
+        setView={(v) => setView(v)}
+        user={appUser}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onAsk={() => setAgentOpen(true)}
+      />
+
       <div className="page">
-        <div className="hero-row">
-          <TiltCard className="ingest-card">
-            <h2>TRUETRAIL</h2>
-            <p className="sub">EVIDENCE ENGINE</p>
-            <div className="ingest-box">
-              <h4>INGEST EVIDENCE</h4>
-
-              <div style={{ marginBottom: "15px" }}>
-                <input
-                  type="file"
-                  id="file-upload"
-                  onChange={(e) => setFile(e.target.files[0])}
-                  style={{ display: "none" }} // Default button chupa diya
-                />
-                <label
-                  htmlFor="file-upload"
-                  className="neon-btn"
-                  style={{
-                    display: "block",
-                    textAlign: "center",
-                    cursor: "pointer",
-                    padding: "12px",
-                    border: "1px dashed rgba(255,255,255,0.2)",
-                    borderRadius: "8px",
-                    background: "rgba(255,255,255,0.02)",
-                  }}
-                >
-                  {file
-                    ? `Selected: ${file.name.substring(0, 15)}...`
-                    : "📁 Choose Evidence File"}
-                </label>
-              </div>
-
-              <button className="neon-btn" onClick={upload}>
-                Upload & Hash
-              </button>
-              {status && <p className="ingest-status">{status}</p>}
-            </div>
-          </TiltCard>
-          <div className="hero-text">
-            <h1>Digital Evidence Correlation</h1>
-            <p>Secure. Correlate. Reconstruct.</p>
-          </div>
-        </div>
-
-        <div className="stage">
-          <SkiperText />
-          <BeeScroll />
-        </div>
-
-        <nav className="tabs" aria-label="Sections">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              className={"tab-btn" + (tab === t ? " active" : "")}
-              onClick={() => setTab(t)}
-            >
-              {t}
-            </button>
-          ))}
-        </nav>
-
-        {tab === "dashboard" && <Ledger refreshKey={refreshKey} />}
-        {tab === "graph" && (
-          <GraphView
-            transactions={txns}
-            calls={calls}
-            scores={engineScores}
-            engine={engineGraph}
+        {view === "cases" && (
+          <Workspaces user={appUser} cases={cases} onOpen={open} />
+        )}
+        {view === "case" && active && (
+          <WorkspaceView
+            key={active.id}
+            c={active}
+            user={appUser}
+            onBack={() => setView("cases")}
           />
         )}
-        {tab === "timeline" && <TimelineView data={timeline} />}
-        {tab === "map" && <MapView data={timeline} />}
-        {tab === "agent" && <AgentChat />}
+        {view === "about" && <About />}
       </div>
+
+      {agentOpen && (
+        <div className="drawer-back" onClick={() => setAgentOpen(false)}>
+          <aside className="drawer" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="drawer-x"
+              onClick={() => setAgentOpen(false)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+            {active ? (
+              <AgentChat key={active.id} user={appUser} c={active} />
+            ) : (
+              <div className="panel neon-card agent">
+                <h2 className="panel-title">Case assistant</h2>
+                <p className="muted">Open a case first. The assistant answers only about the case you are in.</p>
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
     </ReactLenis>
   );
 }

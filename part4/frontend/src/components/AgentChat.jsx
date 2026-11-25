@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { API } from "./Ledger.jsx";
+import { nameOf } from "../investigators.js";
 
 const SUGGEST = [
   "Who is the likely handler, and what is the evidence?",
@@ -28,7 +29,8 @@ function Answer({ text, onRef }) {
   );
 }
 
-export default function AgentChat() {
+export default function AgentChat({ user, c }) {
+  const investigator = user?.name || "Investigator";
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,7 +57,25 @@ export default function AgentChat() {
         body: JSON.stringify({
           question: q,
           history,
-          investigator: "investigator",
+          investigator, // Clerk display name
+          investigator_id: user?.id, // Clerk user id
+          case_id: c.id,
+          case_label: c.caseId,
+          case_name: c.name,
+          has_data: !!c.primary, // only the primary case has the loaded dataset
+          members: (c.members || []).map((m) => nameOf(m)),
+          notes: (c.theories || []).map((t) => ({
+            id: t.id,
+            author: t.name,
+            text: `${t.title}: ${t.text}`,
+          })),
+          evidence: (c.evidence || []).map((ev) => ({
+            id: ev.id,
+            file: ev.file,
+            sha: ev.sha,
+            by: nameOf(ev.uid),
+            ts: ev.ts,
+          })),
         }),
       });
       const d = await r.json();
@@ -88,7 +108,7 @@ export default function AgentChat() {
 
   return (
     <div className="panel neon-card agent">
-      <h2 className="panel-title">Case assistant</h2>
+      <h2 className="panel-title">Case assistant · {c.caseId}</h2>
       <p className="muted small">
         Answers come only from this case's evidence and notes, with the source
         record cited for every fact. Patterns are not proof.

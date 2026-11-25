@@ -2,7 +2,7 @@
    (a 1126px centered #root, centered text, h1/h2 colors) were fighting the layout. */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-html { background: #000; }
+html { background: var(--bg-base, #05050a); min-height: 100%; }
 
 /* Lenis smooth scroll */
 html.lenis, html.lenis body { height: auto; }

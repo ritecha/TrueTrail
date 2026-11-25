@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from agent import router as agent_router
 import os
+from integrity import sha256_file, log_event, _conn, verify_chain
+from report import generate_report
 app = FastAPI()
 app.include_router(agent_router)
 from dotenv import load_dotenv

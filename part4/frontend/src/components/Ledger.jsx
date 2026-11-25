@@ -4,12 +4,11 @@ import { useEffect, useState } from "react";
 // const API = import.meta.env.VITE_API_URL || "http://localhost:8001";
 export const API = "https://digitalevidencebytruetrail-backend.onrender.com";
 
-// Chain of custody table + per-file verify + BSA Section 63 certificate download
+// Chain of custody table + per-file verify
 export default function Ledger({ refreshKey }) {
   const [rows, setRows] = useState([]);
   const [chain, setChain] = useState(null);
   const [offline, setOffline] = useState(false);
-  const [caseId, setCaseId] = useState("CR-2026-001");
   const [checks, setChecks] = useState({}); // file -> verify result
 
   const load = async () => {
@@ -41,29 +40,6 @@ export default function Ledger({ refreshKey }) {
     }
   };
 
-  const certificate = async (row) => {
-    const q = new URLSearchParams({
-      file_name: row.file ?? row.file_name,
-      file_hash: row.file_hash,
-      case_id: caseId,
-    });
-    try {
-      const r = await fetch(`${API}/report?${q}`, { method: "POST" });
-      if (!r.ok) throw new Error();
-      const url = URL.createObjectURL(await r.blob());
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `BSA_${caseId}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      alert(
-        "Could not generate the PDF. Is the backend (port 8001) running with the /report endpoint?",
-      );
-    }
-  };
-
-  const ingests = rows.filter((r) => r.action === "INGEST");
   return (
     <div className="panel neon-card">
       <h2 className="panel-title">Chain of custody</h2>
@@ -132,25 +108,6 @@ export default function Ledger({ refreshKey }) {
           })}
         </tbody>
       </table>
-
-      <div className="cert">
-        <div>
-          <h3>Court certificate (BSA 2023, Section 63)</h3>
-          <p className="muted">Generates a PDF for a file in the ledger.</p>
-        </div>
-        <input
-          value={caseId}
-          onChange={(e) => setCaseId(e.target.value)}
-          placeholder="Case ID"
-        />
-        <button
-          className="neon-btn"
-          disabled={!ingests.length}
-          onClick={() => certificate(ingests[ingests.length - 1])}
-        >
-          Download for latest upload
-        </button>
-      </div>
     </div>
   );
 }

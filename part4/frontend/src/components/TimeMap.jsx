@@ -190,7 +190,7 @@ export function MapView({ data }) {
       <MapContainer
         center={path[0] ?? [28.75, 77.05]}
         zoom={11}
-        style={{ height: "100%", width: "100%", background: "#000" }}
+        style={{ height: "100%", width: "100%", background: "var(--bg-base)" }}
       >
         <TileLayer
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
