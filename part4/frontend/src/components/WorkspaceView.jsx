@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { nameOf, roleOf } from "../investigators.js";
 import { updateCase, unreadCount, ago } from "../store.js";
 import Ledger from "./Ledger.jsx";
@@ -8,7 +8,7 @@ import UploadCard from "./UploadCard.jsx";
 import TiltCard from "./TiltCard.jsx";
 import GroupChat from "./GroupChat.jsx";
 
-// ❌ Purane static JSON imports hata diye gaye hain
+const API_BASE = "https://digitalevidencebytruetrail-backend.onrender.com";
 
 const TABS = [
   ["overview", "Overview"],
@@ -38,15 +38,50 @@ function Empty({ what }) {
 
 export default function WorkspaceView({ c, user, onBack }) {
   const hasEvidence = c.evidence && c.evidence.length > 0;
-  const [tab, setTab] = useState(hasEvidence ? "overview" : "evidence"); // Default to Evidence if empty
+  const [tab, setTab] = useState(hasEvidence ? "overview" : "evidence");
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // ✅ Empty States (Kyunki JSON files delete ho chuki hain)
-  const txns = useMemo(() => [], []);
-  const calls = useMemo(() => [], []);
-  const scores = useMemo(() => ({}), []);
-  const engine = useMemo(() => ({}), []);
-  const timeline = useMemo(() => null, []);
+  // ✅ NAYA: Backend se data fetch karne ke liye states
+  const [loading, setLoading] = useState(true);
+  const [timelineData, setTimelineData] = useState(null);
+  const [transactionsData, setTransactionsData] = useState([]);
+  const [callsData, setCallsData] = useState([]);
+  const [scoresData, setScoresData] = useState({});
+  const [engineData, setEngineData] = useState({});
+
+  // ✅ NAYA: useEffect se Render backend ko call karo
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+
+    // 1. Manya ka Timeline Fetch kar
+    fetch(`${API_BASE}/api/timeline`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data.status === "success") {
+          setTimelineData(data.data);
+        }
+      })
+      .catch((err) => console.error("Timeline fetch error:", err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    // 2. Jaya ka Graph/Transactions Fetch kar (Agar endpoint sahi ho toh)
+    // Note: Jaya ke endpoints /jaya ke prefix se hain
+    fetch(`${API_BASE}/jaya/api/v1/transactions`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && Array.isArray(data)) setTransactionsData(data);
+      })
+      .catch(() =>
+        console.log("Jaya transactions fetch failed (ignore if not ready)"),
+      );
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshKey]);
 
   const unread = unreadCount(c, user.id);
 
@@ -70,11 +105,34 @@ export default function WorkspaceView({ c, user, onBack }) {
     });
     setRefreshKey((k) => k + 1);
   };
+
   const markRead = () =>
     updateCase(c.id, (x) => {
       x.seen[user.id] = new Date().toISOString();
       return x;
     });
+
+  // Agar data fetch ho raha hai toh loading dikhao
+  if (loading && tab !== "evidence") {
+    return (
+      <div
+        className="page"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "50vh",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <h2 style={{ color: "#00ffcc" }}>Connecting to Backend...</h2>
+          <p className="muted">
+            Render server is waking up. This may take 30-50 seconds.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -98,13 +156,14 @@ export default function WorkspaceView({ c, user, onBack }) {
           ))}
         </div>
       </div>
+
       <nav className="subtabs">
         {TABS.map(([k, l]) => (
           <button
             key={k}
             className={"tab-btn" + (tab === k ? " active" : "")}
             onClick={() => setTab(k)}
-            disabled={k === "overview" && !hasEvidence} // OVERVIEW LOCKED
+            disabled={k === "overview" && !hasEvidence}
             style={{
               opacity: k === "overview" && !hasEvidence ? 0.4 : 1,
               cursor:
@@ -132,18 +191,17 @@ export default function WorkspaceView({ c, user, onBack }) {
           <div className="gt-split">
             <aside className="gt-left">
               <div className="gt-title">Timeline</div>
-              {/* ✅ Safe check lagaya hai taaki empty data pe crash na ho */}
-              {timeline ? (
-                <TimelineView data={timeline} />
+              {timelineData ? (
+                <TimelineView data={timelineData} />
               ) : (
                 <p className="muted p-4">No timeline data.</p>
               )}
             </aside>
             <GraphView
-              transactions={txns}
-              calls={calls}
-              scores={scores}
-              engine={engine}
+              transactions={transactionsData}
+              calls={callsData}
+              scores={scoresData}
+              engine={engineData}
             />
           </div>
         ) : (
@@ -152,8 +210,8 @@ export default function WorkspaceView({ c, user, onBack }) {
 
       {tab === "timeline" &&
         (hasEvidence ? (
-          timeline ? (
-            <TimelineView data={timeline} />
+          timelineData ? (
+            <TimelineView data={timelineData} />
           ) : (
             <Empty what="timeline" />
           )
@@ -163,8 +221,8 @@ export default function WorkspaceView({ c, user, onBack }) {
 
       {tab === "map" &&
         (hasEvidence ? (
-          timeline ? (
-            <MapView data={timeline} />
+          timelineData ? (
+            <MapView data={timelineData} />
           ) : (
             <Empty what="map" />
           )
@@ -225,7 +283,7 @@ export default function WorkspaceView({ c, user, onBack }) {
   );
 }
 
-// Overview and Theories functions remain exactly as you had them...
+// ... Overview aur Theories wale functions waise hi rahenge jo pehle the ...
 function Overview({ c, user, unread, markRead, setTab }) {
   const since = c.seen?.[user.id] ?? "";
   const events = [...c.events].reverse().slice(0, 8);
