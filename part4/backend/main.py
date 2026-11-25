@@ -3,15 +3,12 @@ import shutil
 import sys
 
 # ==========================================
-# ✅ SABSE PEHLE PATHS SET KARO (Imports se pehle)
+# ✅ PATH FIX (Sirf zaroori paths)
 # ==========================================
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# Tere backend ka root folder
 sys.path.insert(0, current_dir)          
-# Jaya ka app folder (jahan uska main.py aur config.py hona chahiye)
 sys.path.insert(0, os.path.join(current_dir, "app")) 
-# Manya ka truetrail folder (jahan uska config.py hai)
-sys.path.insert(0, os.path.join(current_dir, "truetrail")) 
+# ❌ truetrail waali line hata di hai taaki Jaya ka config load ho
 
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,10 +18,10 @@ from integrity import sha256_file, log_event, _conn, verify_chain
 from report import generate_report
 from dotenv import load_dotenv
 
-# ✅ Manya ka code
+# ✅ Manya ka code (Relative import use karta hai, toh bina path ke bhi chalega)
 from truetrail.timeline import build_timeline
 
-# ✅ Jaya ka code (Ab yeh bina error ke load hoga)
+# ✅ Jaya ka code (Ab isko apni config file milegi)
 from app.main import app as jaya_app
 
 app = FastAPI()
@@ -41,12 +38,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ Sirf 'data' folder bana rahe hain, 'evidence' hata diya
+# Purana local evidence hata diya, sirf data rakha
 os.makedirs("data", exist_ok=True)
 
 @app.post("/evidence/upload")
 async def upload(file: UploadFile = File(...), actor: str = "investigator"):
-    # Purana local data disconnect karne ke liye ab naya upload 'data' folder mein jayega
     path = f"data/{file.filename}"
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
