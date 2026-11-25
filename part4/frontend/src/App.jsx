@@ -132,7 +132,10 @@ export default function App() {
             ) : (
               <div className="panel neon-card agent">
                 <h2 className="panel-title">Case assistant</h2>
-                <p className="muted">Open a case first. The assistant answers only about the case you are in.</p>
+                <p className="muted">
+                  Open a case first. The assistant answers only about the case
+                  you are in.
+                </p>
               </div>
             )}
           </aside>

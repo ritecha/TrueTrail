@@ -7,11 +7,8 @@ import { TimelineView, MapView } from "./TimeMap.jsx";
 import UploadCard from "./UploadCard.jsx";
 import TiltCard from "./TiltCard.jsx";
 import GroupChat from "./GroupChat.jsx";
-import timeline from "../timeline.json";
-import transactions from "../transactions.json";
-import calls from "../calls.json";
-import engineScores from "../engineScores.json";
-import engineGraph from "../engineGraph.json";
+
+// ❌ Purane static JSON imports hata diye gaye hain
 
 const TABS = [
   ["overview", "Overview"],
@@ -43,7 +40,14 @@ export default function WorkspaceView({ c, user, onBack }) {
   const hasEvidence = c.evidence && c.evidence.length > 0;
   const [tab, setTab] = useState(hasEvidence ? "overview" : "evidence"); // Default to Evidence if empty
   const [refreshKey, setRefreshKey] = useState(0);
-  const txns = useMemo(() => transactions, []);
+
+  // ✅ Empty States (Kyunki JSON files delete ho chuki hain)
+  const txns = useMemo(() => [], []);
+  const calls = useMemo(() => [], []);
+  const scores = useMemo(() => ({}), []);
+  const engine = useMemo(() => ({}), []);
+  const timeline = useMemo(() => null, []);
+
   const unread = unreadCount(c, user.id);
 
   const onUploaded = (d) => {
@@ -52,7 +56,7 @@ export default function WorkspaceView({ c, user, onBack }) {
         id: nid(),
         uid: user.id,
         file: d.file,
-        sha: d.sha256.slice(0, 16),
+        sha: d.sha256 ? d.sha256.slice(0, 16) : "mock-sha-12345",
         ts: new Date().toISOString(),
       });
       x.events.push({
@@ -122,33 +126,51 @@ export default function WorkspaceView({ c, user, onBack }) {
           setTab={setTab}
         />
       )}
+
       {tab === "graph" &&
         (hasEvidence ? (
           <div className="gt-split">
-            {/* LEFT: timeline panel. Your teammates' timeline plugs in here (swap <TimelineView/> or its data). */}
             <aside className="gt-left">
               <div className="gt-title">Timeline</div>
-              <TimelineView data={timeline} />
+              {/* ✅ Safe check lagaya hai taaki empty data pe crash na ho */}
+              {timeline ? (
+                <TimelineView data={timeline} />
+              ) : (
+                <p className="muted p-4">No timeline data.</p>
+              )}
             </aside>
-            {/* RIGHT: graph */}
             <GraphView
               transactions={txns}
               calls={calls}
-              scores={engineScores}
-              engine={engineGraph}
+              scores={scores}
+              engine={engine}
             />
           </div>
         ) : (
           <Empty what="graph" />
         ))}
+
       {tab === "timeline" &&
         (hasEvidence ? (
-          <TimelineView data={timeline} />
+          timeline ? (
+            <TimelineView data={timeline} />
+          ) : (
+            <Empty what="timeline" />
+          )
         ) : (
           <Empty what="timeline" />
         ))}
+
       {tab === "map" &&
-        (hasEvidence ? <MapView data={timeline} /> : <Empty what="map" />)}
+        (hasEvidence ? (
+          timeline ? (
+            <MapView data={timeline} />
+          ) : (
+            <Empty what="map" />
+          )
+        ) : (
+          <Empty what="map" />
+        ))}
 
       {tab === "evidence" && (
         <div
