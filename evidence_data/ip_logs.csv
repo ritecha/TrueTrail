@@ -1,5 +1,0 @@
-log_id,timestamp,username,ip_address,device_os
-101,2023-10-25 10:14:55,amit_s,103.241.12.45,Android
-102,2023-10-25 11:19:40,rkumar,115.240.99.12,Windows
-103,2023-10-25 14:04:10,amit_s,103.241.12.45,Android
-104,2023-10-26 09:29:15,ppatel,117.200.45.89,macOS

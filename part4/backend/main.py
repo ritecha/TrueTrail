@@ -1,6 +1,14 @@
 import os
 import shutil
 import sys
+
+# ==========================================
+# ✅ JAYA KE IMPORT FIX (Sabse pehle aayega)
+# ==========================================
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
+sys.path.insert(0, os.path.join(current_dir, "app"))
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -8,14 +16,13 @@ from agent import router as agent_router
 from integrity import sha256_file, log_event, _conn, verify_chain
 from report import generate_report
 from dotenv import load_dotenv
-os.makedirs("data", exist_ok=True)  # Jaya ke FORENSIC_DATA_DIR ke liye
 
 # ✅ Manya ka code
 from truetrail.timeline import build_timeline
 
-# ✅ Jaya ka code (App mount karne ke liye)
+# ✅ Jaya ka code (Ab yeh path milne ke baad chalega)
 from app.main import app as jaya_app
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "app"))
+
 app = FastAPI()
 app.include_router(agent_router)
 
@@ -31,6 +38,7 @@ app.add_middleware(
 )
 
 os.makedirs("evidence", exist_ok=True)
+os.makedirs("data", exist_ok=True) 
 
 @app.post("/evidence/upload")
 async def upload(file: UploadFile = File(...), actor: str = "investigator"):
@@ -74,5 +82,4 @@ def get_manya_timeline():
 # ==========================================
 # ✅ JAYA KA CODE MOUNT KAR DIYA
 # ==========================================
-# Isse Jaya ke saare endpoints /jaya/... ke through access honge
 app.mount("/jaya", jaya_app)
