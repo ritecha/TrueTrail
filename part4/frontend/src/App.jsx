@@ -6,29 +6,28 @@ import "./effects.css";
 import AgentChat from "./components/AgentChat.jsx";
 import "./agent.css";
 import "./ui.css";
-import "./theme.css"; // keep LAST so it wins over the older css files
+import "./theme.css";
 import Header from "./components/Header.jsx";
 import About from "./components/About.jsx";
 import Workspaces from "./components/Workspaces.jsx";
 import WorkspaceView from "./components/WorkspaceView.jsx";
 import { useCases } from "./store.js";
 
-// 🔐 Clerk Imports
 import { useUser, SignIn } from "@clerk/react";
 import { rememberUser } from "./investigators.js";
 
 export default function App() {
-  // 🔐 Clerk Hooks
   const { isLoaded, isSignedIn, user } = useUser();
+  const [guest, setGuest] = useState(
+    () => localStorage.getItem("truetrail.guest") === "1",
+  );
 
-  // App State
-  const [view, setView] = useState("cases"); // cases | case | about
+  const [view, setView] = useState("cases");
   const [caseId, setCaseId] = useState(null);
   const [agentOpen, setAgentOpen] = useState(false);
   const cases = useCases();
   const active = cases.find((c) => c.id === caseId);
 
-  // 🌗 Theme State
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
 
   useEffect(() => {
@@ -38,47 +37,73 @@ export default function App() {
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
-  // 1. Loading State
-  if (!isLoaded) {
+  if (!isLoaded && !guest) {
     return (
       <div
         className="page"
         style={{
           display: "flex",
+          flexDirection: "column",
+          gap: "12px",
           justifyContent: "center",
           alignItems: "center",
           height: "100vh",
         }}
       >
-        Loading authentication...
+        <span>Loading authentication...</span>
+        <button
+          className="mini"
+          onClick={() => {
+            localStorage.setItem("truetrail.guest", "1");
+            setGuest(true);
+          }}
+        >
+          Continue as Guest (Demo)
+        </button>
       </div>
     );
   }
 
-  // 2. Not Signed In State (Clerk Login Screen)
-  if (!isSignedIn) {
+  if (!isSignedIn && !guest) {
     return (
       <ReactLenis root>
         <RippleBackground />
         <div
           style={{
             display: "flex",
+            flexDirection: "column",
+            gap: "16px",
             justifyContent: "center",
             alignItems: "center",
-            height: "100vh",
+            minHeight: "100vh",
+            padding: "20px",
           }}
         >
-          <SignIn routing="hash" />
+          <SignIn routing="hash" fallbackRedirectUrl="/" forceRedirectUrl="/" />
+          <button
+            className="neon-btn"
+            onClick={() => {
+              localStorage.setItem("truetrail.guest", "1");
+              setGuest(true);
+            }}
+          >
+            Continue as Guest (No Login)
+          </button>
         </div>
       </ReactLenis>
     );
   }
 
-  // 3. Map Clerk User to Your App's User Format
-  const appUser = {
-    id: user.id,
-    name: user.fullName || user.firstName || "Investigator",
-  };
+  const appUser =
+    isSignedIn && user
+      ? {
+          id: user.id,
+          name: user.fullName || user.firstName || "Investigator",
+        }
+      : {
+          id: "guest.demo",
+          name: "Demo Investigator",
+        };
 
   rememberUser(appUser.id, appUser.name);
 
@@ -88,7 +113,6 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
-  // 4. Main App (Signed In)
   return (
     <ReactLenis root>
       <RippleBackground />
