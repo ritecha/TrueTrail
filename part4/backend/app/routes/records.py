@@ -4,7 +4,9 @@ validation flags, and rejected rows.
 """
 from __future__ import annotations
 
+import csv
 import json
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter
@@ -39,6 +41,32 @@ def list_transactions(
         tuple([*params, limit, offset]),
     )
     items = [json.loads(r["payload_json"]) for r in rows]
+
+    # ✅ FALLBACK: Agar DB khali hai (Render restart), toh CSV se padho
+    if not items and not evidence_id:
+        csv_path = Path(__file__).resolve().parent.parent.parent / "data" / "upi_logs.csv"
+        if csv_path.exists():
+            with csv_path.open("r", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    items.append({
+                        "txn_id": row.get("Txn_ID"),
+                        "rrn": row.get("RRN"),
+                        "timestamp": row.get("Txn_Timestamp_UTC"),
+                        "channel": "UPI",
+                        "amount": float(row.get("Amount") or 0),
+                        "sender_account": row.get("Payer_Account"),
+                        "sender_vpa": row.get("Payer_VPA"),
+                        "sender_name": row.get("Payer_Name"),
+                        "sender_mobile": row.get("Payer_Mobile"),
+                        "receiver_account": row.get("Payee_Account"),
+                        "receiver_vpa": row.get("Payee_VPA"),
+                        "receiver_name": row.get("Payee_Name"),
+                        "device_id": row.get("Device_ID"),
+                        "ip_address": row.get("Device_IP"),
+                        "status": row.get("Status") or "SUCCESS",
+                    })
+            items = items[offset : offset + limit]
+
     return {"count": len(items), "items": items}
 
 
