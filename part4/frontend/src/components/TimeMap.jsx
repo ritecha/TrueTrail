@@ -261,17 +261,22 @@ export function TimelineView({ data }) {
           ))}
       </div>
 
-      <ol className="tl2">
-        {rows.map((r, i) =>
-          r.day ? (
-            <li className="tl2-day" key={"d" + i}>
-              <span>{r.day}</span>
-            </li>
-          ) : (
-            <Item key={r.e.event_id} e={r.e} side={r.side} />
-          ),
-        )}
-      </ol>
+      {/* ✅ FIX: Wrapped in a scrollable container */}
+      <div
+        style={{ maxHeight: "58vh", overflowY: "auto", paddingRight: "8px" }}
+      >
+        <ol className="tl2">
+          {rows.map((r, i) =>
+            r.day ? (
+              <li className="tl2-day" key={"d" + i}>
+                <span>{r.day}</span>
+              </li>
+            ) : (
+              <Item key={r.e.event_id} e={r.e} side={r.side} />
+            ),
+          )}
+        </ol>
+      </div>
     </div>
   );
 }
