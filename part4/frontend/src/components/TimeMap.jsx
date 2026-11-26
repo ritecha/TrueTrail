@@ -8,7 +8,7 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-// ✅ NAYA: Epoch (Unix) seconds ko sahi JS Date mein convert karne ke liye
+// ✅ Epoch (Unix) seconds ko sahi JS Date mein convert karne ke liye
 const toDate = (t) => {
   if (t == null) return null;
   if (/^\d{9,10}(\.\d+)?$/.test(String(t).trim())) {
@@ -18,7 +18,7 @@ const toDate = (t) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-// ✅ Updated utc function (taaki Map ke popups mein bhi sahi time dikhe)
+// ✅ Updated utc function
 const utc = (t) => {
   const d = toDate(t);
   if (!d) return "Unknown time";
@@ -55,7 +55,6 @@ const normType = (raw) => {
   return TYPES[up] ? up : up || "TOWER_PING";
 };
 
-// ✅ Updated day function
 const day = (t) => {
   const d = toDate(t);
   if (!d) return "Unknown date";
@@ -67,7 +66,6 @@ const day = (t) => {
   });
 };
 
-// ✅ Updated clock function
 const clock = (t) => {
   const d = toDate(t);
   if (!d) return "--:-- UTC";
@@ -202,7 +200,6 @@ export function TimelineView({ data }) {
       return n;
     });
 
-  // ✅ NAYA: NORMAL sessions ko hide karne ke liye filter lagaya
   const sessions = (Array.isArray(data?.sessions) ? data.sessions : [])
     .filter(
       (s) =>
@@ -279,35 +276,63 @@ export function TimelineView({ data }) {
   );
 }
 
+// ✅ UPDATED: MapView with Fallback logic for event points and geo_tracks points
 export function MapView({ data }) {
   const feats = data?.geo_tracks?.[0]?.geojson?.features ?? [];
-  const path =
+  const geoPath =
     feats
       .find((f) => f.properties?.kind === "path")
       ?.geometry?.coordinates?.map((c) => [c[1], c[0]]) ?? [];
-  const pings = feats.filter((f) => f.properties?.kind === "ping");
+  const geoPings = feats.filter((f) => f.properties?.kind === "ping");
+
+  // Fallback: plot tower coordinates directly from events (e.g. cdr.csv) & geo_tracks.points
+  const eventPts = (data?.events || [])
+    .filter((e) => e.latitude != null && e.longitude != null)
+    .map((e) => ({
+      pos: [Number(e.latitude), Number(e.longitude)],
+      label: `${e.event_type || "EVENT"} · ${utc(e.timestamp_utc || e.start_utc)}`,
+    }));
+
+  const trackPts = (data?.geo_tracks?.[0]?.points || []).map((p) => ({
+    pos: [Number(p.latitude), Number(p.longitude)],
+    label: `Tower ${p.tower_id || ""} · ${utc(p.timestamp)}`,
+  }));
+
+  const markers = geoPings.length
+    ? geoPings.map((p) => ({
+        pos: [p.geometry.coordinates[1], p.geometry.coordinates[0]],
+        label: utc(p.properties?.time_utc),
+      }))
+    : trackPts.length
+      ? trackPts
+      : eventPts;
+
+  const path = geoPath.length ? geoPath : markers.map((m) => m.pos);
+
   return (
     <div
       className="panel neon-card"
       style={{ padding: 0, overflow: "hidden", height: 560 }}
     >
       <MapContainer
-        center={path[0] ?? [28.75, 77.05]}
-        zoom={11}
+        center={path[0] ?? [28.6139, 77.209]}
+        zoom={5}
         style={{ height: "100%", width: "100%", background: "var(--bg-base)" }}
       >
         <TileLayer
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; OpenStreetMap contributors"
         />
-        <Polyline
-          positions={path}
-          pathOptions={{ color: "#22d3ee", weight: 2, opacity: 0.7 }}
-        />
-        {pings.map((p, i) => (
+        {path.length > 1 && (
+          <Polyline
+            positions={path}
+            pathOptions={{ color: "#22d3ee", weight: 2, opacity: 0.7 }}
+          />
+        )}
+        {markers.map((m, i) => (
           <CircleMarker
             key={i}
-            center={[p.geometry.coordinates[1], p.geometry.coordinates[0]]}
+            center={m.pos}
             radius={5}
             pathOptions={{
               color: "#f472b6",
@@ -316,7 +341,7 @@ export function MapView({ data }) {
               weight: 1,
             }}
           >
-            <Popup>{utc(p.properties?.time_utc)}</Popup>
+            <Popup>{m.label}</Popup>
           </CircleMarker>
         ))}
       </MapContainer>
