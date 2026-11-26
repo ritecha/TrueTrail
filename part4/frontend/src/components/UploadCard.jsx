@@ -1,25 +1,18 @@
 import { useEffect, useState, useRef } from "react";
 import { API } from "./Ledger.jsx";
-import { createClient } from "@supabase/supabase-js";
 
 const ACCEPTED = ".csv,.xlsx,.xls,.json,.pdf,.png,.jpg,.jpeg";
-import { supabase } from "../supabaseClient";
 
-export default function UploadCard({ actor, onDone }) {
+export default function UploadCard({ actor, onDone, caseId = "c1" }) {
   const [files, setFiles] = useState([]);
   const [db, setDb] = useState("checking");
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     let live = true;
-    // Check Supabase first, then fallback to FastAPI
-    if (supabase) {
-      setDb("online");
-    } else {
-      fetch(`${API}/audit/verify`)
-        .then((r) => live && setDb(r.ok ? "online" : "offline"))
-        .catch(() => live && setDb("offline"));
-    }
+    fetch(`${API}/jaya/health`)
+      .then((r) => live && setDb(r.ok ? "online" : "offline"))
+      .catch(() => live && setDb("offline"));
     return () => {
       live = false;
     };
@@ -54,54 +47,39 @@ export default function UploadCard({ actor, onDone }) {
       );
 
       try {
-        if (supabase) {
-          // 🔥 Supabase Upload Logic
-          const fileExt = item.file.name.split(".").pop();
-          const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-          const { data, error } = await supabase.storage
-            .from("evidence")
-            .upload(fileName, item.file);
+        const body = new FormData();
+        body.append("file", item.file);
+        body.append("uploaded_by", actor || "investigator");
+        body.append("case_id", caseId);
+        body.append("sync", "true");
 
-          if (error) throw error;
+        const r = await fetch(`${API}/jaya/api/v1/evidence/upload`, {
+          method: "POST",
+          body,
+        });
 
-          // Save metadata to DB (Assuming a 'files' table exists)
-          await supabase.from("files").insert([
-            {
-              filename: item.file.name,
-              storage_path: fileName,
-              uploaded_by: actor,
-            },
-          ]);
-
-          const mockResponse = {
-            file: item.file.name,
-            sha256: "supabase_hash_" + Date.now(),
-          };
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === item.id ? { ...f, status: "parsed", progress: 100 } : f,
-            ),
-          );
-          onDone?.(mockResponse);
-        } else {
-          // Fallback to FastAPI
-          const body = new FormData();
-          body.append("file", item.file);
-          const r = await fetch(
-            `${API}/evidence/upload?actor=${encodeURIComponent(actor)}`,
-            { method: "POST", body },
-          );
-          if (!r.ok) throw new Error();
-          const d = await r.json();
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === item.id ? { ...f, status: "parsed", progress: 100 } : f,
-            ),
-          );
-          onDone?.(d);
+        if (!r.ok) {
+          const errData = await r.json().catch(() => ({}));
+          throw new Error(errData.detail || "Upload failed");
         }
+
+        const d = await r.json();
+
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === item.id ? { ...f, status: "parsed", progress: 100 } : f,
+          ),
+        );
+        onDone?.({
+          ...d,
+          file:
+            d.file ||
+            d.filename ||
+            d.evidence?.original_filename ||
+            item.file.name,
+        });
       } catch (err) {
-        console.error(err);
+        console.error("Upload Error:", err);
         setFiles((prev) =>
           prev.map((f) => (f.id === item.id ? { ...f, status: "failed" } : f)),
         );
@@ -120,9 +98,7 @@ export default function UploadCard({ actor, onDone }) {
           }}
         >
           {db === "online"
-            ? supabase
-              ? "● Supabase Connected"
-              : "● Backend Connected"
+            ? "● Backend Connected"
             : db === "offline"
               ? "○ Offline"
               : "Connecting…"}
@@ -219,7 +195,9 @@ export default function UploadCard({ actor, onDone }) {
                     <span className="muted">Pending</span>
                   )}
                   {f.status === "uploading" && (
-                    <span style={{ color: "var(--risk-med)" }}>Hashing…</span>
+                    <span style={{ color: "var(--risk-med)" }}>
+                      Processing…
+                    </span>
                   )}
                   {f.status === "parsed" && (
                     <span style={{ color: "var(--risk-low)" }}>Parsed</span>

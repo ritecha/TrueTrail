@@ -11,8 +11,10 @@ export const ROLE = {
   other: { label: "Other account", color: "#64748b" },
 };
 
-export function buildGraph(txns, calls = [], scores = {}) {
-  const ok = txns.filter((t) => t.status === "SUCCESS");
+export function buildGraph(txns = [], calls = [], scores = {}) {
+  const ok = (Array.isArray(txns) ? txns : []).filter(
+    (t) => t.status === "SUCCESS",
+  );
 
   // 1) Identity: map UPI handles to account numbers so one person = one node
   const vpaToAcct = new Map();
@@ -91,9 +93,8 @@ export function buildGraph(txns, calls = [], scores = {}) {
       e.first = Math.min(e.first, ts);
       e.last = Math.max(e.last, ts);
       edges.set(k, e);
-    } else if (r)
-      getNode(r, t.receiver_name).cashIn += t.amount; // cash deposit / NEFT credit
-    else if (s) getNode(s, t.sender_name).cashOut += t.amount; // ATM withdrawal
+    } else if (r) getNode(r, t.receiver_name).cashIn += t.amount;
+    else if (s) getNode(s, t.sender_name).cashOut += t.amount;
   }
 
   // 3) Roles
@@ -131,15 +132,14 @@ export function buildGraph(txns, calls = [], scores = {}) {
       }
   }
 
-  // 4b) Handler: a phone that calls several flagged accounts shortly after each of them
-  //     receives money (and before they forward it). Uses the call records (CDR).
+  // 4b) Handler
   const WINDOW = 10 * 60 * 1000;
   const flaggedPhones = new Set();
   const phoneOf = (n) =>
     [...n.phones.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   const mules = suspicious.filter((n) => n.role === "mule" && phoneOf(n));
   mules.forEach((m) => flaggedPhones.add(phoneOf(m)));
-  const hits = new Map(); // caller -> Map(muleId -> count)
+  const hits = new Map();
   for (const c of calls) {
     if (flaggedPhones.has(c.caller)) continue;
     const m = mules.find((x) => phoneOf(x) === c.callee);
@@ -188,7 +188,6 @@ export function buildGraph(txns, calls = [], scores = {}) {
   };
 }
 
-// Returns fresh copies (the graph library mutates what it receives).
 export function viewGraph(g, mode) {
   const label = (e) =>
     "₹" +
@@ -204,7 +203,6 @@ export function viewGraph(g, mode) {
       })),
     };
   }
-  // Order the chain by following the biggest outgoing flow from the source
   const inChain = g.nodes.filter((n) => g.sus.has(n.id));
   const flow = g.edges.filter(
     (e) => g.sus.has(e.source) && g.sus.has(e.target),
@@ -261,23 +259,32 @@ export function viewGraph(g, mode) {
   return { nodes: ns, links };
 }
 
-// ---- Engine graph: the correlation engine's own output (top 100 nodes by controller score) ----
 export const KIND_COLOR = {
   account: "#f87171",
   phone: "#34d399",
   device: "#a78bfa",
   ip_address: "#fbbf24",
   vpa: "#38bdf8",
+  ENTITY: "#38bdf8",
+  EVENT: "#f472b6",
 };
+
 export function viewEngine(engine) {
+  const rawNodes = Array.isArray(engine?.nodes) ? engine.nodes : [];
+  const rawEdges = Array.isArray(engine?.edges)
+    ? engine.edges
+    : Array.isArray(engine?.links)
+      ? engine.links
+      : [];
+
   return {
-    nodes: engine.nodes.map((n) => ({ ...n, role: "engine" })),
-    links: engine.edges.map((e) => ({
+    nodes: rawNodes.map((n) => ({ ...n, role: "engine" })),
+    links: rawEdges.map((e) => ({
       source: e.source,
       target: e.target,
       kind: e.kind === "TRANSFERRED" ? "flow" : "link",
-      total: e.amount || 0,
-      label: "",
+      total: e.amount || e.total || 0,
+      label: e.role || "",
     })),
   };
 }

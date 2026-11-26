@@ -1,150 +1,90 @@
-
 import hashlib
 import pandas as pd
-
+import re
 from . import config
 from .timeutil import to_utc
 
-
 def file_hash(path):
-    """Generate SHA256 hash for source file."""
     if not path.exists():
         return None
-
     sha = hashlib.sha256()
-
     with open(path, "rb") as file:
         for chunk in iter(lambda: file.read(8192), b""):
             sha.update(chunk)
-
     return sha.hexdigest()
-
 
 def read_csv(path):
     if not path.exists():
         return pd.DataFrame()
-
-    return pd.read_csv(path)
-
-
-def normalize_phone(value):
-    if pd.isna(value):
-        return None
-
-    return str(value).strip()
-
+    df = pd.read_csv(path)
+    
+    # Auto-detect and rename columns
+    aliases = {
+        "timestamp": ["timestamp", "date", "time", "datetime", "call_time", "start_time", "start", "txn_date"],
+        "victim_id": ["victim_id", "victim", "phone_number", "calling", "caller", "msisdn", "sender", "account_number"],
+        "amount": ["amount", "amt", "value", "transaction_amount", "txn_amount"],
+        "counterparty": ["counterparty", "called", "receiver", "payee", "destination"],
+        "tower_id": ["tower_id", "cell_id", "first_cell"],
+        "latitude": ["latitude", "lat", "tower_lat"],
+        "longitude": ["longitude", "lon", "lng", "tower_lon"],
+    }
+    
+    rename_dict = {}
+    for col in df.columns:
+        c = str(col).strip().lower().replace(" ", "_")
+        for target, vars in aliases.items():
+            if c in vars:
+                rename_dict[col] = target
+                break
+                
+    df = df.rename(columns=rename_dict)
+    
+    # Fallback: Agar timestamp nahi hai, toh pehle column ko hi timestamp maan lo
+    if "timestamp" not in df.columns and len(df.columns) > 0:
+        df = df.rename(columns={df.columns[0]: "timestamp"})
+        
+    return df
 
 def load_towers():
     df = read_csv(config.TOWERS_FILE)
-
-    if df.empty:
-        return df
-
-    required = ["tower_id", "latitude", "longitude"]
-    for col in required:
-        if col not in df.columns:
-            raise ValueError(f"towers.csv missing column: {col}")
-
     return df
 
-
 def load_events():
-    """Load CDR, IPDR and tower ping records into one event table."""
-
     records = []
-
-    sources = [
-        ("cdr", config.CDR_FILE, "timestamp"),
-        ("ipdr", config.IPDR_FILE, "start_time"),
-        ("ping", config.PINGS_FILE, "timestamp"),
-    ]
-
-    for source_name, path, time_column in sources:
+    sources = [("cdr", config.CDR_FILE), ("ipdr", config.IPDR_FILE), ("ping", config.PINGS_FILE)]
+    
+    for source_name, path in sources:
         df = read_csv(path)
-
-        if df.empty:
-            continue
-
-        if time_column not in df.columns:
-            raise ValueError(
-                f"{path.name} must contain '{time_column}' column"
-            )
-
+        if df.empty: continue
+        
         for index, row in df.iterrows():
-            timestamp = to_utc(row[time_column])
-
-            if pd.isna(timestamp):
+            if "timestamp" not in row or pd.isna(row["timestamp"]):
                 continue
-
-            victim = row.get("victim_id", row.get("phone_number"))
-
+                
+            timestamp = to_utc(row["timestamp"])
+            victim = row.get("victim_id", "Unknown")
+            
             records.append({
                 "event_id": f"{source_name}_{index}",
                 "event_type": source_name,
-                "victim_id": normalize_phone(victim),
+                "victim_id": str(victim),
                 "timestamp_utc": timestamp,
-                "end_utc": to_utc(
-                    row.get("end_time", row[time_column])
-                ),
-                "counterparty": row.get(
-                    "counterparty",
-                    row.get("destination_ip")
-                ),
-                "tower_id": row.get("tower_id"),
-                "latitude": row.get("latitude"),
-                "longitude": row.get("longitude"),
+                "end_utc": timestamp, # Simplification for prototype
+                "counterparty": str(row.get("counterparty", "Unknown")),
+                "tower_id": str(row.get("tower_id", "Unknown")),
+                "latitude": row.get("latitude", 28.6139),
+                "longitude": row.get("longitude", 77.2090),
                 "source_file": path.name,
-                "source_row": int(index),
-                "source_hash": file_hash(path),
             })
-
+            
     events = pd.DataFrame(records)
-
-    if events.empty:
-        return events
-
-    return events.sort_values("timestamp_utc").reset_index(drop=True)
-
+    return events
 
 def load_transactions():
-    """Load and normalize UPI/NEFT transaction records."""
-
     df = read_csv(config.TXN_FILE)
-
-    if df.empty:
-        return df
-
-    required = ["timestamp", "victim_id", "amount"]
-    for col in required:
-        if col not in df.columns:
-            raise ValueError(
-                f"txn.csv missing required column: {col}"
-            )
-
-    df["timestamp_utc"] = df["timestamp"].apply(to_utc)
-    df["victim_id"] = df["victim_id"].apply(normalize_phone)
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-
-    if "payee_id" not in df.columns:
-        df["payee_id"] = None
-
-    if "transaction_id" not in df.columns:
-        df["transaction_id"] = [
-            f"txn_{i}" for i in range(len(df))
-        ]
-
-    if "is_coerced" in df.columns:
-        df["is_coerced"] = df["is_coerced"].map(
-            lambda x: (
-                str(x).strip().lower() in ["1", "true", "yes"]
-                if pd.notna(x) else None
-            )
-        )
-
-    return df.dropna(
-        subset=["timestamp_utc", "victim_id", "amount"]
-    ).sort_values("timestamp_utc").reset_index(drop=True)
-
+    if not df.empty and "timestamp" in df.columns:
+        df["timestamp_utc"] = df["timestamp"].apply(to_utc)
+    return df
 
 def load_all():
     return {

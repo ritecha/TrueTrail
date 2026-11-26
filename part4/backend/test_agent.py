@@ -2,7 +2,7 @@
 import json, os, tempfile, types
 os.environ.setdefault("TT_NOTES_DB", os.path.join(tempfile.mkdtemp(), "n.db"))
 import part4.backend.agent as agent
-from part4.backend.case_store import store
+from case_store import store
 
 S = store()
 ok = lambda c, m: print(("PASS  " if c else "FAIL  ") + m) or (c or (_ for _ in ()).throw(SystemExit(1)))

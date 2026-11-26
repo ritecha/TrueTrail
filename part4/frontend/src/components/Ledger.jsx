@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
-// export const API = import.meta.env.VITE_API_URL ?? "http://localhost:8001";
-// const API = import.meta.env.VITE_API_URL || "http://localhost:8001";
+// export const API = "http://localhost:8001";
 export const API = "https://digitalevidencebytruetrail-backend.onrender.com";
 
 // Chain of custody table + per-file verify

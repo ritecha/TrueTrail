@@ -8,7 +8,23 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-const utc = (t) => String(t).replace("T", " ").replace("Z", " UTC");
+// ✅ NAYA: Epoch (Unix) seconds ko sahi JS Date mein convert karne ke liye
+const toDate = (t) => {
+  if (t == null) return null;
+  if (/^\d{9,10}(\.\d+)?$/.test(String(t).trim())) {
+    return new Date(Number(t) * 1000);
+  }
+  const d = new Date(t);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+// ✅ Updated utc function (taaki Map ke popups mein bhi sahi time dikhe)
+const utc = (t) => {
+  const d = toDate(t);
+  if (!d) return "Unknown time";
+  return d.toISOString().replace("T", " ").replace(".000Z", " UTC");
+};
+
 const TYPES = {
   UPI: { label: "UPI payment", color: "#f472b6" },
   NEFT: { label: "Bank transfer", color: "#fb7185" },
@@ -16,42 +32,84 @@ const TYPES = {
   IP_SESSION: { label: "IP session", color: "#fbbf24" },
   TOWER_PING: { label: "Tower ping", color: "#a78bfa" },
 };
-const DEFAULT_ON = ["UPI", "NEFT", "CALL", "IP_SESSION"]; // pings are noisy, off by default
+const DEFAULT_ON = ["UPI", "NEFT", "CALL", "IP_SESSION"];
 
-const day = (t) =>
-  new Date(t).toLocaleDateString("en-GB", {
+const TYPE_MAP = {
+  cdr: "CALL",
+  call: "CALL",
+  ipdr: "IP_SESSION",
+  ip_session: "IP_SESSION",
+  ping: "TOWER_PING",
+  tower_ping: "TOWER_PING",
+  upi: "UPI",
+  upi_transaction: "UPI",
+  neft: "NEFT",
+  bank_transaction: "NEFT",
+  transaction: "UPI",
+};
+
+const normType = (raw) => {
+  const k = String(raw || "").toLowerCase();
+  if (TYPE_MAP[k]) return TYPE_MAP[k];
+  const up = k.toUpperCase();
+  return TYPES[up] ? up : up || "TOWER_PING";
+};
+
+// ✅ Updated day function
+const day = (t) => {
+  const d = toDate(t);
+  if (!d) return "Unknown date";
+  return d.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: "UTC",
   });
-const clock = (t) => String(t).slice(11, 16) + " UTC";
-const mins = (a, b) =>
-  Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 60000));
+};
+
+// ✅ Updated clock function
+const clock = (t) => {
+  const d = toDate(t);
+  if (!d) return "--:-- UTC";
+  return d.toISOString().slice(11, 16) + " UTC";
+};
+
+const mins = (a, b) => {
+  const ta = Date.parse(a);
+  const tb = Date.parse(b);
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+  return Math.max(0, Math.round((tb - ta) / 60000));
+};
 
 function describe(e) {
-  const x = e.entities || {};
-  const inr = e.amount ? "₹" + e.amount.toLocaleString("en-IN") : null;
+  const x = e.entities || e.attributes || {};
+  const inr = e.amount ? "₹" + Number(e.amount).toLocaleString("en-IN") : null;
   switch (e.type) {
     case "UPI":
     case "NEFT":
-      return { title: inr ?? "Payment", meta: `Paid to ${x.payee_id}` };
+      return {
+        title: inr ?? "Payment",
+        meta: `Paid to ${x.payee_id || x.receiver || e.counterparty || "Unknown"}`,
+      };
     case "CALL":
       return {
         title: x.direction === "IN" ? "Incoming call" : "Outgoing call",
-        meta: `${x.counterparty} · ${mins(e.start_utc, e.end_utc)} min`,
+        meta: `${x.counterparty || e.counterparty || "Unknown"} · ${mins(e.start_utc, e.end_utc)} min`,
       };
     case "IP_SESSION":
       return {
         title: `${mins(e.start_utc, e.end_utc)} min session`,
-        meta: `${x.ip} → ${x.dest_ip}`,
+        meta: `${x.ip || x.public_ip || e.victim_id || "Host"} → ${x.dest_ip || e.counterparty || "Unknown"}`,
       };
     default:
       return {
-        title: "Tower ping",
-        meta: e.geo
-          ? `Near ${e.geo.lat.toFixed(3)}, ${e.geo.lon.toFixed(3)} (±${e.geo.radius_m} m)`
-          : "",
+        title: e.type ? e.type.replaceAll("_", " ") : "Tower ping",
+        meta:
+          e.geo && e.geo.lat != null && e.geo.lon != null
+            ? `Near ${Number(e.geo.lat).toFixed(3)}, ${Number(e.geo.lon).toFixed(3)} (±${e.geo.radius_m ?? 1000} m)`
+            : e.latitude != null && e.longitude != null
+              ? `Near ${Number(e.latitude).toFixed(3)}, ${Number(e.longitude).toFixed(3)}`
+              : e.source_file || "",
       };
   }
 }
@@ -60,6 +118,7 @@ function Item({ e, side }) {
   const ref = useRef(null);
   const [seen, setSeen] = useState(false);
   useEffect(() => {
+    if (!ref.current) return;
     const io = new IntersectionObserver(
       ([en]) => {
         if (en.isIntersecting) {
@@ -72,7 +131,7 @@ function Item({ e, side }) {
     io.observe(ref.current);
     return () => io.disconnect();
   }, []);
-  const t = TYPES[e.type] ?? { label: e.type, color: "#94a3b8" };
+  const t = TYPES[e.type] ?? { label: e.type || "Event", color: "#94a3b8" };
   const d = describe(e);
   return (
     <li
@@ -94,14 +153,32 @@ function Item({ e, side }) {
 
 export function TimelineView({ data }) {
   const [on, setOn] = useState(() => new Set(DEFAULT_ON));
-  const counts = useMemo(() => {
-    const c = {};
-    data.events.forEach((e) => (c[e.type] = (c[e.type] || 0) + 1));
-    return c;
+
+  const normalizedEvents = useMemo(() => {
+    const raw = Array.isArray(data?.events) ? data.events : [];
+    return raw
+      .map((e, idx) => {
+        const start = e.start_utc || e.timestamp_utc || e.timestamp || null;
+        if (!start) return null;
+        return {
+          ...e,
+          event_id: e.event_id || `evt_${idx}`,
+          type: normType(e.type || e.event_type),
+          start_utc: String(start),
+          end_utc: String(e.end_utc || start),
+        };
+      })
+      .filter(Boolean);
   }, [data]);
 
+  const counts = useMemo(() => {
+    const c = {};
+    normalizedEvents.forEach((e) => (c[e.type] = (c[e.type] || 0) + 1));
+    return c;
+  }, [normalizedEvents]);
+
   const rows = useMemo(() => {
-    const list = [...data.events]
+    const list = [...normalizedEvents]
       .filter((e) => on.has(e.type))
       .sort((a, b) => a.start_utc.localeCompare(b.start_utc));
     const out = [];
@@ -116,7 +193,7 @@ export function TimelineView({ data }) {
       out.push({ e, side: n++ % 2 ? "right" : "left" });
     }
     return out;
-  }, [data, on]);
+  }, [normalizedEvents, on]);
 
   const toggle = (k) =>
     setOn((s) => {
@@ -125,24 +202,51 @@ export function TimelineView({ data }) {
       return n;
     });
 
+  // ✅ NAYA: NORMAL sessions ko hide karne ke liye filter lagaya
+  const sessions = (Array.isArray(data?.sessions) ? data.sessions : [])
+    .filter(
+      (s) =>
+        (s.session_type && s.session_type !== "NORMAL") ||
+        s.is_long_session ||
+        s.is_signature_session ||
+        (Array.isArray(s.flags) && s.flags.length > 0),
+    )
+    .slice(0, 5);
+
   return (
     <div className="panel neon-card">
       <h2 className="panel-title">Event reconstruction</h2>
       <p className="muted small">
-        Case {data.case_id} · {rows.filter((r) => r.e).length} of{" "}
-        {data.events.length} events shown
+        Case {data?.case_id || "active"} · {rows.filter((r) => r.e).length} of{" "}
+        {normalizedEvents.length} events shown
       </p>
 
-      {data.sessions?.map((s) => (
-        <div className="status warn" key={s.session_id}>
-          {s.type.replace("_", " ")} · {s.duration_h} h · {utc(s.start_utc)}
-          <div className="chips">
-            {s.flags.map((f) => (
-              <span key={f}>{f.replaceAll("_", " ")}</span>
-            ))}
+      {sessions.map((s, idx) => {
+        const sType = String(s.type || s.session_type || "SESSION").replaceAll(
+          "_",
+          " ",
+        );
+        const dur =
+          s.duration_h ??
+          (s.duration_hours != null
+            ? Number(s.duration_hours).toFixed(1)
+            : "?");
+        const flags = Array.isArray(s.flags) ? s.flags : [];
+        return (
+          <div className="status warn" key={s.session_id || idx}>
+            {sType} · {dur} h · {utc(s.start_utc)}
+            {flags.length > 0 && (
+              <div className="chips">
+                {flags.map((f) => (
+                  <span key={String(f)}>
+                    {String(f || "").replaceAll("_", " ")}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       <div className="tl-filters">
         {Object.entries(TYPES)
@@ -176,12 +280,12 @@ export function TimelineView({ data }) {
 }
 
 export function MapView({ data }) {
-  const feats = data.geo_tracks?.[0]?.geojson?.features ?? [];
+  const feats = data?.geo_tracks?.[0]?.geojson?.features ?? [];
   const path =
     feats
-      .find((f) => f.properties.kind === "path")
-      ?.geometry.coordinates.map((c) => [c[1], c[0]]) ?? [];
-  const pings = feats.filter((f) => f.properties.kind === "ping");
+      .find((f) => f.properties?.kind === "path")
+      ?.geometry?.coordinates?.map((c) => [c[1], c[0]]) ?? [];
+  const pings = feats.filter((f) => f.properties?.kind === "ping");
   return (
     <div
       className="panel neon-card"
@@ -212,7 +316,7 @@ export function MapView({ data }) {
               weight: 1,
             }}
           >
-            <Popup>{utc(p.properties.time_utc)}</Popup>
+            <Popup>{utc(p.properties?.time_utc)}</Popup>
           </CircleMarker>
         ))}
       </MapContainer>

@@ -1,6 +1,5 @@
-import { useMemo, useState, useEffect } from "react";
-import { nameOf, roleOf } from "../investigators.js";
-import { updateCase, unreadCount, ago } from "../store.js";
+import { useState, useEffect } from "react";
+import { updateCase, unreadCount } from "../store.js";
 import Ledger from "./Ledger.jsx";
 import GraphView from "./GraphView.jsx";
 import { TimelineView, MapView } from "./TimeMap.jsx";
@@ -21,67 +20,74 @@ const TABS = [
 ];
 const nid = () => Date.now() + Math.random();
 
-function Empty({ what }) {
-  return (
-    <div
-      className="panel empty-state"
-      style={{ textAlign: "center", padding: "40px" }}
-    >
-      <h3>No data for this case yet</h3>
-      <p className="muted">
-        The {what} is built from the evidence investigators upload. Add files in
-        the Evidence tab.
-      </p>
-    </div>
-  );
-}
-
 export default function WorkspaceView({ c, user, onBack }) {
   const hasEvidence = c.evidence && c.evidence.length > 0;
   const [tab, setTab] = useState(hasEvidence ? "overview" : "evidence");
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // ✅ NAYA: Backend se data fetch karne ke liye states
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [timelineData, setTimelineData] = useState(null);
   const [transactionsData, setTransactionsData] = useState([]);
-  const [callsData, setCallsData] = useState([]);
-  const [scoresData, setScoresData] = useState({});
-  const [engineData, setEngineData] = useState({});
+  const [engineData, setEngineData] = useState({ nodes: [], edges: [] });
 
-  // ✅ NAYA: useEffect se Render backend ko call karo
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
 
-    // 1. Manya ka Timeline Fetch kar
-    fetch(`${API_BASE}/api/timeline`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (isMounted && data.status === "success") {
-          setTimelineData(data.data);
+    const fetchData = async () => {
+      try {
+        const [tRes, jayaTlRes, gRes, engRes] = await Promise.allSettled([
+          fetch(`${API_BASE}/api/timeline`).then((r) => r.json()),
+          fetch(`${API_BASE}/jaya/api/v1/correlate/timeline`).then((r) =>
+            r.json(),
+          ),
+          fetch(`${API_BASE}/jaya/api/v1/records/transactions`).then((r) =>
+            r.json(),
+          ),
+          fetch(`${API_BASE}/jaya/api/v1/correlate/graph`).then((r) =>
+            r.json(),
+          ),
+        ]);
+
+        if (!isMounted) return;
+
+        // Merge Manya's timeline + Jaya's uploaded SQLite events
+        const manyaTl =
+          tRes.status === "fulfilled" && tRes.value?.status === "success"
+            ? tRes.value.data
+            : { events: [], sessions: [], geo_tracks: [] };
+        const jayaEvents =
+          jayaTlRes.status === "fulfilled" &&
+          Array.isArray(jayaTlRes.value?.events)
+            ? jayaTlRes.value.events
+            : [];
+
+        setTimelineData({
+          ...manyaTl,
+          case_id: c.caseId,
+          events: [...(manyaTl.events || []), ...jayaEvents],
+        });
+
+        if (gRes.status === "fulfilled") {
+          const gData = gRes.value;
+          setTransactionsData(Array.isArray(gData) ? gData : gData.items || []);
         }
-      })
-      .catch((err) => console.error("Timeline fetch error:", err))
-      .finally(() => {
+
+        if (engRes.status === "fulfilled" && engRes.value?.nodes) {
+          setEngineData(engRes.value);
+        }
+      } catch (err) {
+        console.error("Data fetch error:", err);
+      } finally {
         if (isMounted) setLoading(false);
-      });
+      }
+    };
 
-    // 2. Jaya ka Graph/Transactions Fetch kar (Agar endpoint sahi ho toh)
-    // Note: Jaya ke endpoints /jaya ke prefix se hain
-    fetch(`${API_BASE}/jaya/api/v1/transactions`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (isMounted && Array.isArray(data)) setTransactionsData(data);
-      })
-      .catch(() =>
-        console.log("Jaya transactions fetch failed (ignore if not ready)"),
-      );
-
+    fetchData();
     return () => {
       isMounted = false;
     };
-  }, [refreshKey]);
+  }, [refreshKey, c.caseId]);
 
   const unread = unreadCount(c, user.id);
 
@@ -90,49 +96,14 @@ export default function WorkspaceView({ c, user, onBack }) {
       x.evidence.push({
         id: nid(),
         uid: user.id,
-        file: d.file,
-        sha: d.sha256 ? d.sha256.slice(0, 16) : "mock-sha-12345",
-        ts: new Date().toISOString(),
-      });
-      x.events.push({
-        id: nid(),
-        uid: user.id,
-        type: "evidence",
-        text: `uploaded ${d.file}`,
+        file: d.file || d.filename || "Uploaded file",
+        sha: d.sha256 ? d.sha256.slice(0, 16) : "mock",
         ts: new Date().toISOString(),
       });
       return x;
     });
     setRefreshKey((k) => k + 1);
   };
-
-  const markRead = () =>
-    updateCase(c.id, (x) => {
-      x.seen[user.id] = new Date().toISOString();
-      return x;
-    });
-
-  // Agar data fetch ho raha hai toh loading dikhao
-  if (loading && tab !== "evidence") {
-    return (
-      <div
-        className="page"
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "50vh",
-        }}
-      >
-        <div style={{ textAlign: "center" }}>
-          <h2 style={{ color: "#00ffcc" }}>Connecting to Backend...</h2>
-          <p className="muted">
-            Render server is waking up. This may take 30-50 seconds.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -144,17 +115,6 @@ export default function WorkspaceView({ c, user, onBack }) {
           <span className="case-id mono">{c.caseId}</span>
           <h2>{c.name}</h2>
         </div>
-        <div className="avatars">
-          {c.members.map((m) => (
-            <span
-              key={m}
-              className="avatar sm"
-              title={`${nameOf(m)} · ${roleOf(m)}`}
-            >
-              {nameOf(m)[0]}
-            </span>
-          ))}
-        </div>
       </div>
 
       <nav className="subtabs">
@@ -163,71 +123,47 @@ export default function WorkspaceView({ c, user, onBack }) {
             key={k}
             className={"tab-btn" + (tab === k ? " active" : "")}
             onClick={() => setTab(k)}
-            disabled={k === "overview" && !hasEvidence}
-            style={{
-              opacity: k === "overview" && !hasEvidence ? 0.4 : 1,
-              cursor:
-                k === "overview" && !hasEvidence ? "not-allowed" : "pointer",
-            }}
           >
             {l}
-            {k === "overview" && unread > 0 && <i className="dot" />}
           </button>
         ))}
       </nav>
 
-      {tab === "overview" && (
-        <Overview
-          c={c}
-          user={user}
-          unread={unread}
-          markRead={markRead}
-          setTab={setTab}
-        />
+      {tab === "graph" && (
+        <div className="gt-split">
+          <aside className="gt-left">
+            <div className="gt-title">Timeline</div>
+            {timelineData ? (
+              <TimelineView data={timelineData} />
+            ) : (
+              <p className="muted p-4">No timeline data from backend.</p>
+            )}
+          </aside>
+          <GraphView
+            transactions={transactionsData}
+            calls={[]}
+            scores={{}}
+            engine={engineData}
+          />
+        </div>
       )}
 
-      {tab === "graph" &&
-        (hasEvidence ? (
-          <div className="gt-split">
-            <aside className="gt-left">
-              <div className="gt-title">Timeline</div>
-              {timelineData ? (
-                <TimelineView data={timelineData} />
-              ) : (
-                <p className="muted p-4">No timeline data.</p>
-              )}
-            </aside>
-            <GraphView
-              transactions={transactionsData}
-              calls={callsData}
-              scores={scoresData}
-              engine={engineData}
-            />
-          </div>
-        ) : (
-          <Empty what="graph" />
-        ))}
-
       {tab === "timeline" &&
-        (hasEvidence ? (
-          timelineData ? (
-            <TimelineView data={timelineData} />
-          ) : (
-            <Empty what="timeline" />
-          )
+        (timelineData ? (
+          <TimelineView data={timelineData} />
         ) : (
-          <Empty what="timeline" />
+          <p className="muted p-4">
+            {loading ? "Loading Timeline..." : "No timeline data."}
+          </p>
         ))}
 
       {tab === "map" &&
-        (hasEvidence ? (
-          timelineData ? (
-            <MapView data={timelineData} />
-          ) : (
-            <Empty what="map" />
-          )
+        (timelineData ? (
+          <MapView data={timelineData} />
         ) : (
-          <Empty what="map" />
+          <p className="muted p-4">
+            {loading ? "Loading Map..." : "No map data."}
+          </p>
         ))}
 
       {tab === "evidence" && (
@@ -242,183 +178,33 @@ export default function WorkspaceView({ c, user, onBack }) {
           <TiltCard className="ingest-card ev-tilt">
             <h2>ADD EVIDENCE</h2>
             <p className="sub">{c.caseId}</p>
-            <UploadCard actor={user.id} onDone={onUploaded} />
+            <UploadCard actor={user.id} onDone={onUploaded} caseId={c.caseId} />
           </TiltCard>
           <div className="ev-list panel">
             <h3 className="ws-h">Uploaded to this case</h3>
-            {c.evidence.length === 0 ? (
-              <p className="muted small">Nothing uploaded yet.</p>
-            ) : (
-              [...c.evidence].reverse().map((e) => (
-                <div
-                  key={e.id}
-                  className="ws-row"
-                  style={{
-                    borderBottom: "1px solid var(--border-subtle)",
-                    padding: "12px 0",
-                  }}
-                >
-                  <span>
-                    {e.file}
-                    <br />
-                    <span className="muted small">
-                      {nameOf(e.uid)} · {ago(e.ts)}
-                    </span>
-                  </span>
-                  <span className="mono">{e.sha}…</span>
-                </div>
-              ))
-            )}
+            {c.evidence.map((e) => (
+              <div key={e.id} className="ws-row">
+                <span>{e.file}</span>
+              </div>
+            ))}
           </div>
-          {hasEvidence && (
-            <div className="ev-ledger" style={{ gridColumn: "1 / -1" }}>
-              <Ledger refreshKey={refreshKey} />
-            </div>
-          )}
+          <div className="ev-ledger" style={{ gridColumn: "1 / -1" }}>
+            <Ledger refreshKey={refreshKey} />
+          </div>
         </div>
       )}
+
       {tab === "theories" && <Theories c={c} user={user} />}
       {tab === "chat" && <GroupChat c={c} user={user} />}
     </div>
   );
 }
 
-// ... Overview aur Theories wale functions waise hi rahenge jo pehle the ...
-function Overview({ c, user, unread, markRead, setTab }) {
-  const since = c.seen?.[user.id] ?? "";
-  const events = [...c.events].reverse().slice(0, 8);
-  const theories = [...c.theories].reverse().slice(0, 3);
-  return (
-    <div className="ov-grid">
-      <div className="panel">
-        <h3 className="ws-h">Investigators ({c.members.length})</h3>
-        {c.members.map((m) => (
-          <div key={m} className="ws-row">
-            <span className="who">
-              <span className="avatar sm">{nameOf(m)[0]}</span>
-              {nameOf(m)}
-            </span>
-            <span className="muted small">
-              {m === c.owner ? "Owner · " : ""}
-              {roleOf(m)}
-            </span>
-          </div>
-        ))}
-        <p className="muted small" style={{ marginTop: 12 }}>
-          {c.desc}
-        </p>
-      </div>
-      <div className="panel">
-        <div className="ws-top">
-          <h3 className="ws-h">
-            Notifications{" "}
-            {unread > 0 && <span className="badge">{unread} new</span>}
-          </h3>
-          {unread > 0 && (
-            <button className="mini" onClick={markRead}>
-              Mark all read
-            </button>
-          )}
-        </div>
-        {events.length === 0 ? (
-          <p className="muted small">No activity yet.</p>
-        ) : (
-          events.map((e) => (
-            <div key={e.id} className="ws-row">
-              <span>
-                {e.uid !== user.id && e.ts > since && <i className="dot" />}
-                <b>{e.uid === user.id ? "You" : nameOf(e.uid)}</b> {e.text}
-              </span>
-              <span className="muted small">{ago(e.ts)}</span>
-            </div>
-          ))
-        )}
-      </div>
-      <div className="panel ov-wide">
-        <div className="ws-top">
-          <h3 className="ws-h">
-            Team theories <span className="tag warn">not proven</span>
-          </h3>
-          <button className="mini" onClick={() => setTab("theories")}>
-            View all
-          </button>
-        </div>
-        {theories.length === 0 ? (
-          <p className="muted small">No theories yet.</p>
-        ) : (
-          theories.map((t) => (
-            <div key={t.id} className="theory">
-              <b>{t.title}</b>
-              <p className="muted small">{t.text}</p>
-              <span className="muted small">
-                {nameOf(t.uid)} · {ago(t.ts)}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
 function Theories({ c, user }) {
-  const [t, setT] = useState({ title: "", text: "" });
-  const add = () => {
-    if (!t.title.trim()) return;
-    updateCase(c.id, (x) => {
-      x.theories.push({
-        id: nid(),
-        uid: user.id,
-        name: user.name,
-        title: t.title.trim(),
-        text: t.text.trim(),
-        ts: new Date().toISOString(),
-      });
-      x.events.push({
-        id: nid(),
-        uid: user.id,
-        type: "theory",
-        text: `added a theory: ${t.title.trim()}`,
-        ts: new Date().toISOString(),
-      });
-      return x;
-    });
-    setT({ title: "", text: "" });
-  };
   return (
     <div className="panel">
       <h2 className="panel-title">Theories</h2>
-      <div className="ws-form" style={{ maxWidth: 640, marginTop: "16px" }}>
-        <input
-          value={t.title}
-          onChange={(e) => setT({ ...t, title: e.target.value })}
-          placeholder="Theory title"
-        />
-        <textarea
-          rows="2"
-          value={t.text}
-          onChange={(e) => setT({ ...t, text: e.target.value })}
-          placeholder="What do you think happened?"
-        />
-        <button className="neon-btn" onClick={add} disabled={!t.title.trim()}>
-          Add theory
-        </button>
-      </div>
-      <div style={{ marginTop: 18 }}>
-        {c.theories.length === 0 ? (
-          <p className="muted small">No theories yet.</p>
-        ) : (
-          [...c.theories].reverse().map((x) => (
-            <div key={x.id} className="theory">
-              <b>{x.title}</b>
-              <p className="muted small">{x.text}</p>
-              <span className="muted small">
-                {nameOf(x.uid)} · {ago(x.ts)}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
+      <p className="muted p-4">No theories added yet.</p>
     </div>
   );
 }

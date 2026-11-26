@@ -1,0 +1,257 @@
+{
+  "report_header": {
+    "tool": "Cellebrite UFED (synthetic mimic)",
+    "extraction_type": "Full File System",
+    "case_number": "CYB/PUN/2026/0147",
+    "examiner": "Synthetic Examiner, Cyber Lab",
+    "extraction_start": "16-03-2026 11:00:00(UTC+5:30)",
+    "extraction_end": "16-03-2026 11:42:00(UTC+5:30)",
+    "device": {
+      "model": "Samsung Galaxy A34 (SM-A346E)",
+      "os": "Android 14",
+      "imei": "351718227824895",
+      "msisdn": "+919015430391",
+      "owner": "Rajesh Kumar Sharma"
+    }
+  },
+  "installed_applications": [
+    {
+      "name": "WhatsApp",
+      "package": "com.whatsapp",
+      "version": "2.24.8.76",
+      "install_time": "01-01-2026 09:00:00(UTC+5:30)",
+      "last_used": "14-03-2026 13:47:00(UTC+5:30)"
+    },
+    {
+      "name": "AnyDesk",
+      "package": "com.anydesk.anydeskandroid",
+      "version": "8.0.9",
+      "install_time": "14-03-2026 10:31:07(UTC+5:30)",
+      "last_used": "14-03-2026 13:30:00(UTC+5:30)"
+    },
+    {
+      "name": "Google Pay",
+      "package": "com.google.android.apps.nbu.paisa.user",
+      "version": "230.1",
+      "install_time": "01-03-2025 09:00:00(UTC+5:30)",
+      "last_used": "14-03-2026 13:11:00(UTC+5:30)"
+    },
+    {
+      "name": "Chrome",
+      "package": "com.android.chrome",
+      "version": "122.0",
+      "install_time": "01-03-2025 09:00:00(UTC+5:30)",
+      "last_used": "14-03-2026 09:40:00(UTC+5:30)"
+    }
+  ],
+  "chats": [
+    {
+      "chat_id": "WA-C1",
+      "source_app": "WhatsApp",
+      "participants": [
+        "9015430391",
+        "9262473178"
+      ],
+      "messages": [
+        {
+          "msg_id": "WA-0001",
+          "timestamp": "14-03-2026 10:02:41(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "9262473178",
+          "to": "9015430391",
+          "body": "Sir, this is Inspector Vikram Rathore, Cyber Crime Cell. Please answer the call. It is regarding a case against your Aadhaar.",
+          "status": "Read",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0002",
+          "timestamp": "14-03-2026 10:19:50(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "9262473178",
+          "to": "9015430391",
+          "body": "You are under digital arrest. Do not disconnect the video call or speak to anyone.",
+          "status": "Read",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0003",
+          "timestamp": "14-03-2026 10:29:30(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "9262473178",
+          "to": "9015430391",
+          "body": "Install AnyDesk from Play Store for verification of your devices. Share the 9-digit code.",
+          "status": "Read",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0004",
+          "timestamp": "14-03-2026 10:33:12(UTC+5:30)",
+          "direction": "Outgoing",
+          "from": "9015430391",
+          "to": "9262473178",
+          "body": "Code: 481 276 905",
+          "status": "Sent",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0005",
+          "timestamp": "14-03-2026 11:08:20(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "9262473178",
+          "to": "9015430391",
+          "body": "Transfer Rs 1,00,000 to RBI verification account: amit1586@pnb. It will be refunded after verification.",
+          "status": "Read",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0006",
+          "timestamp": "14-03-2026 11:13:05(UTC+5:30)",
+          "direction": "Outgoing",
+          "from": "9015430391",
+          "to": "9262473178",
+          "body": "Done sir",
+          "status": "Sent",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0007",
+          "timestamp": "14-03-2026 12:03:10(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "9262473178",
+          "to": "9015430391",
+          "body": "Second verification deposit Rs 1,00,000. Same account amit1586@pnb.",
+          "status": "Read",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0008",
+          "timestamp": "14-03-2026 12:06:02(UTC+5:30)",
+          "direction": "Outgoing",
+          "from": "9015430391",
+          "to": "9262473178",
+          "body": "Done sir",
+          "status": "Sent",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0009",
+          "timestamp": "14-03-2026 13:08:15(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "9262473178",
+          "to": "9015430391",
+          "body": "Final deposit Rs 90,000 to amit1586@pnb.",
+          "status": "Read",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-0010",
+          "timestamp": "14-03-2026 13:11:40(UTC+5:30)",
+          "direction": "Outgoing",
+          "from": "9015430391",
+          "to": "9262473178",
+          "body": "Done sir",
+          "status": "Sent",
+          "deleted": true
+        },
+        {
+          "msg_id": "WA-0011",
+          "timestamp": "14-03-2026 13:47:30(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "9262473178",
+          "to": "9015430391",
+          "body": "Verification complete. Refund in 24 hours. Delete this chat.",
+          "status": "Read",
+          "deleted": false
+        }
+      ]
+    },
+    {
+      "chat_id": "WA-C2",
+      "source_app": "WhatsApp",
+      "participants": [
+        "9015430391",
+        "Mom"
+      ],
+      "messages": [
+        {
+          "msg_id": "WA-F001",
+          "timestamp": "13-03-2026 19:06:00(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "Mom",
+          "to": "9015430391",
+          "body": "Beta, are you free tomorrow?",
+          "status": "Read",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-F002",
+          "timestamp": "13-03-2026 19:07:00(UTC+5:30)",
+          "direction": "Outgoing",
+          "from": "Mom",
+          "to": "9015430391",
+          "body": "Yes, will call you in the evening",
+          "status": "Read",
+          "deleted": false
+        },
+        {
+          "msg_id": "WA-F003",
+          "timestamp": "13-03-2026 19:08:00(UTC+5:30)",
+          "direction": "Incoming",
+          "from": "Mom",
+          "to": "9015430391",
+          "body": "Ok take care",
+          "status": "Read",
+          "deleted": false
+        }
+      ]
+    }
+  ],
+  "sms_messages": [
+    {
+      "sms_id": "SMS-1",
+      "timestamp": "14-03-2026 11:12:43(UTC+5:30)",
+      "sender": "VM-HDFCBK",
+      "body": "Rs.100,000.00 debited from a/c XX2814 on 14-03-26 to VPA amit1586@pnb (UPI Ref No 680635651269). Not you? Report immediately."
+    },
+    {
+      "sms_id": "SMS-2",
+      "timestamp": "14-03-2026 12:05:21(UTC+5:30)",
+      "sender": "VM-HDFCBK",
+      "body": "Rs.100,000.00 debited from a/c XX2814 on 14-03-26 to VPA amit1586@pnb (UPI Ref No 613261117800). Not you? Report immediately."
+    },
+    {
+      "sms_id": "SMS-3",
+      "timestamp": "14-03-2026 13:10:58(UTC+5:30)",
+      "sender": "VM-HDFCBK",
+      "body": "Rs.90,000.00 debited from a/c XX2814 on 14-03-26 to VPA amit1586@pnb (UPI Ref No 695761228685). Not you? Report immediately."
+    }
+  ],
+  "call_log": [
+    {
+      "call_id": "CL-1",
+      "timestamp": "14-03-2026 10:05:12(UTC+5:30)",
+      "direction": "Incoming",
+      "number": "+919262473178",
+      "duration_sec": 840,
+      "type": "Voice"
+    },
+    {
+      "call_id": "CL-2",
+      "timestamp": "14-03-2026 10:20:05(UTC+5:30)",
+      "direction": "Incoming",
+      "number": "+919262473178",
+      "duration_sec": 12420,
+      "type": "WhatsApp Video"
+    }
+  ],
+  "contacts": [
+    {
+      "name": "Mom",
+      "number": "+918688623924"
+    },
+    {
+      "name": "Office",
+      "number": "+917542168942"
+    }
+  ]
+}

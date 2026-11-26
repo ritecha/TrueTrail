@@ -1,0 +1,216 @@
+{
+  "warning": "ANSWER KEY - for Members 2/3/4 validation only. Never feed this to the parsers.",
+  "entities": {
+    "V": {
+      "name": "Rajesh Kumar Sharma",
+      "phone": "9015430391",
+      "acct": "45146270482814",
+      "vpa": "rajesh8095@okhdfcbank",
+      "ifsc": "HDFC0893252",
+      "imei": "351718227824895",
+      "device": "3772a077021721a2",
+      "ip": "106.72.172.125",
+      "city": "Pune"
+    },
+    "P1": {
+      "name": "Fake Officer (P1)",
+      "phone": "9262473178",
+      "acct": "99737631165667",
+      "vpa": "fake33@okicici",
+      "ifsc": "ICIC0010651",
+      "imei": "351080132677367",
+      "device": "f469611a11f51252",
+      "ip": "49.173.221.61",
+      "city": "Jaipur"
+    },
+    "H1": {
+      "name": "Handler (H1)",
+      "phone": "9991183842",
+      "acct": "93990916998543",
+      "vpa": "handler510@oksbi",
+      "ifsc": "SBIN0534624",
+      "imei": "355135427849802",
+      "device": "96a68f812d810a48",
+      "ip": "106.190.114.142",
+      "city": "Kolkata"
+    },
+    "M1": {
+      "name": "Amit Tiwari",
+      "phone": "7322602563",
+      "acct": "80112805982620",
+      "vpa": "amit1586@pnb",
+      "ifsc": "PUNB0450533",
+      "imei": "354216073375432",
+      "device": "ca0385813dbad3c6",
+      "ip": "117.12.182.112",
+      "city": "Lucknow"
+    },
+    "M2": {
+      "name": "Sunita Devi",
+      "phone": "6443699577",
+      "acct": "56159514846564",
+      "vpa": "sunita9468@okaxis",
+      "ifsc": "UTIB0823662",
+      "imei": "357387214895138",
+      "device": "ed6cfc7403d75e17",
+      "ip": "49.117.35.206",
+      "city": "Hyderabad"
+    },
+    "M3": {
+      "name": "Rohan Mehta",
+      "phone": "6223623166",
+      "acct": "79868727743487",
+      "vpa": "rohan558@ibl",
+      "ifsc": "KKBK0347143",
+      "imei": "355876036690968",
+      "device": "f78df0cac5e40c02",
+      "ip": "152.35.222.119",
+      "city": "Delhi"
+    },
+    "M4": {
+      "name": "Kavita Singh",
+      "phone": "6923271937",
+      "acct": "46537556464170",
+      "vpa": "kavita33@okhdfcbank",
+      "ifsc": "HDFC0805310",
+      "imei": "354529912419041",
+      "device": "31bdb2a0df3dbe4d",
+      "ip": "106.188.134.248",
+      "city": "Bengaluru"
+    },
+    "M5": {
+      "name": "Imran Sheikh",
+      "phone": "8454948083",
+      "acct": "98776945314737",
+      "vpa": "imran273@ybl",
+      "ifsc": "YESB0996507",
+      "imei": "355876036690968",
+      "device": "f78df0cac5e40c02",
+      "ip": "152.35.222.119",
+      "city": "Delhi"
+    },
+    "M6": {
+      "name": "Pooja Nair",
+      "phone": "8204711671",
+      "acct": "13435240824008",
+      "vpa": "pooja777@ybl",
+      "ifsc": "YESB0427109",
+      "imei": "359022941318694",
+      "device": "9136682575250def",
+      "ip": "117.9.60.74",
+      "city": "Ahmedabad"
+    },
+    "CX": {
+      "name": "Nexa Digital Assets Pvt Ltd",
+      "phone": "9488771906",
+      "acct": "71349361832421",
+      "vpa": "nexadigital.pay@ybl",
+      "ifsc": "YESB0024994",
+      "imei": "355940139904906",
+      "device": "fbdaa35adf9c1e2a",
+      "ip": "117.83.30.249",
+      "city": "Mumbai"
+    }
+  },
+  "chain": [
+    "V",
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "M5",
+    "M6",
+    "CX"
+  ],
+  "shared_resources": {
+    "entities": [
+      "M3",
+      "M5"
+    ],
+    "imei": "355876036690968",
+    "device_id": "f78df0cac5e40c02",
+    "public_ip": "152.35.222.119"
+  },
+  "mastermind_link": {
+    "handler": "H1",
+    "calls_each_mule_before_forwarding": true
+  },
+  "coercion_window_ist": {
+    "video_call_start": "2026-03-14 10:20:05",
+    "video_call_end": "2026-03-14 13:47:05",
+    "anydesk_install": "2026-03-14 10:31:07"
+  },
+  "flows": [
+    {
+      "flow": 1,
+      "txn_ids": [
+        "HDF132F40DDB1D7FCB3D48F729D86003",
+        "PUNDB8C6DF5BF89BC437E536CA15C024",
+        "UTI915FE06961751B70528CBCC60229B",
+        "KKB329A388ECF7AEE0F382C77ADB0879",
+        "HDF6F67786767B4332F01FBAF8F58C74",
+        "YESEA006C3AB85878FAB5FD6DBBC8E54",
+        "YES5DF4AF981C35168F3EA8BB8B0D3B6"
+      ],
+      "hop_times_utc": [
+        "2026-03-14T05:42:40Z",
+        "2026-03-14T05:45:49Z",
+        "2026-03-14T05:50:05Z",
+        "2026-03-14T05:54:33Z",
+        "2026-03-14T05:57:50Z",
+        "2026-03-14T05:59:51Z",
+        "2026-03-14T06:04:53Z"
+      ]
+    },
+    {
+      "flow": 2,
+      "txn_ids": [
+        "HDFC9E45ADC225A7AA98C8EBED550478",
+        "PUN23842C9779E44501BAFE8E45ED9BF",
+        "UTI4B9F0FF90D970B6DDC75CC782D789",
+        "KKBF6A041053984E07240F6AD9FBE1A2",
+        "HDF7CE716E36FC9A5138F96B1637DA05",
+        "YES75F2A11B434F7ABE60CB481FE9F65",
+        "YES8BE0C50B7A2C6F49ADA332145163F"
+      ],
+      "hop_times_utc": [
+        "2026-03-14T06:35:18Z",
+        "2026-03-14T06:39:41Z",
+        "2026-03-14T06:40:41Z",
+        "2026-03-14T06:45:32Z",
+        "2026-03-14T06:46:38Z",
+        "2026-03-14T06:50:48Z",
+        "2026-03-14T06:55:38Z"
+      ]
+    },
+    {
+      "flow": 3,
+      "txn_ids": [
+        "HDFB7206F2E1BDB1812926337C6675D3",
+        "PUNEBAABDDA76C8BEEC0190490976A08",
+        "UTIB77892C62AF5F391C21ABDD370C19",
+        "KKB27D9C44A2F1C82CD44F6FC67728DA",
+        "HDF5BE4E176B42317490A39EF0A6668F",
+        "YES81E02C8B309C7C3AF256E0179AFC5",
+        "YES874AC42C7D74D9AE4646494D45A23"
+      ],
+      "hop_times_utc": [
+        "2026-03-14T07:40:55Z",
+        "2026-03-14T07:43:15Z",
+        "2026-03-14T07:45:25Z",
+        "2026-03-14T07:49:46Z",
+        "2026-03-14T07:50:58Z",
+        "2026-03-14T07:53:40Z",
+        "2026-03-14T07:54:55Z"
+      ]
+    }
+  ],
+  "expected_counts": {
+    "upi_rows_in_file": 264,
+    "unique_txns": 261,
+    "dup_rows": 3,
+    "corrupt_timestamp_rows": 2,
+    "cdr_rows": 392,
+    "ipdr_rows": 125
+  }
+}

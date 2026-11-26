@@ -8,10 +8,11 @@ import {
   KIND_COLOR,
 } from "../graphLogic.js";
 
-// Canvas drawing cannot use CSS variables, so pick ink by theme.
-const isLight = () => document.documentElement.getAttribute("data-theme") === "light";
-const ink = (a = 1) => (isLight() ? `rgba(15,23,42,${a})` : `rgba(255,255,255,${a})`);
-const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+const isLight = () =>
+  document.documentElement.getAttribute("data-theme") === "light";
+const ink = (a = 1) =>
+  isLight() ? `rgba(15,23,42,${a})` : `rgba(255,255,255,${a})`;
+const inr = (n) => "₹" + Math.round(n || 0).toLocaleString("en-IN");
 const hhmm = (t) => new Date(t).toISOString().slice(11, 16);
 
 export default function GraphView({ transactions, calls, scores, engine }) {
@@ -19,14 +20,16 @@ export default function GraphView({ transactions, calls, scores, engine }) {
     () => buildGraph(transactions, calls, scores),
     [transactions, calls, scores],
   );
-  const [mode, setMode] = useState("network"); // network | all | engine
+  const [mode, setMode] = useState("network");
   const [selected, setSelected] = useState(null);
   const [q, setQ] = useState("");
   const [miss, setMiss] = useState(false);
-  const data = useMemo(
-    () => (mode === "engine" ? viewEngine(engine) : viewGraph(graph, mode)),
-    [graph, engine, mode],
-  );
+  const data = useMemo(() => {
+    if (mode === "engine") {
+      return viewEngine(engine);
+    }
+    return viewGraph(graph, mode);
+  }, [graph, engine, mode]);
   const wrap = useRef(null);
   const fg = useRef(null);
   const [w, setW] = useState(800);
@@ -44,21 +47,24 @@ export default function GraphView({ transactions, calls, scores, engine }) {
     return () => clearTimeout(t);
   }, [mode, w]);
 
-  // redraw the canvas when the theme is switched
   useEffect(() => {
     const mo = new MutationObserver(() => fg.current?.refresh?.());
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    mo.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
     return () => mo.disconnect();
   }, []);
 
-  // "Search from graph": find an account / person / phone and zoom to it
   const find = (e) => {
     e.preventDefault();
     const s = q.trim().toLowerCase();
     if (!s) return;
     const n = data.nodes.find(
       (x) =>
-        String(x.name ?? x.label ?? "").toLowerCase().includes(s) ||
+        String(x.name ?? x.label ?? "")
+          .toLowerCase()
+          .includes(s) ||
         String(x.id).toLowerCase().includes(s) ||
         String(x.phone ?? "").includes(s),
     );
@@ -76,11 +82,11 @@ export default function GraphView({ transactions, calls, scores, engine }) {
 
   const drawNode = (n, ctx, gs) => {
     if (n.role === "engine") {
-      const r = 2.5 + (n.ctrl || 0) * 9;
-      const color = KIND_COLOR[n.kind] || "#94a3b8";
+      const r = 2.5 + (n.ctrl || 0.25) * 9;
+      const color = KIND_COLOR[n.kind] || KIND_COLOR[n.type] || "#94a3b8";
       ctx.save();
       ctx.shadowColor = color;
-      ctx.shadowBlur = n.ctrl > 0.5 ? 10 : 0;
+      ctx.shadowBlur = (n.ctrl || 0) > 0.5 ? 10 : 0;
       ctx.beginPath();
       ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
       ctx.fillStyle = color + "b3";
@@ -93,13 +99,14 @@ export default function GraphView({ transactions, calls, scores, engine }) {
         ctx.lineWidth = 1.2 / gs;
         ctx.stroke();
       }
-      if (gs > (n.kind === "account" ? 1.4 : 2.6)) {
+      if (gs > (n.kind === "account" ? 1.4 : 2.2)) {
+        const lbl = String(n.label || n.id || "");
         ctx.font = `${9 / gs}px Inter, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = ink(0.6);
         ctx.fillText(
-          n.kind === "account" ? "…" + n.label.slice(-4) : n.label,
+          n.kind === "account" ? "…" + lbl.slice(-4) : lbl,
           n.x,
           n.y + r + 2 / gs,
         );
@@ -133,9 +140,7 @@ export default function GraphView({ transactions, calls, scores, engine }) {
       ctx.font = `${(flagged ? 11 : 9) / gs}px Inter, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillStyle = flagged
-        ? ink(0.88)
-        : ink(0.55);
+      ctx.fillStyle = flagged ? ink(0.88) : ink(0.55);
       ctx.fillText(n.name, n.x, n.y + r + 3 / gs);
     }
   };
@@ -167,14 +172,32 @@ export default function GraphView({ transactions, calls, scores, engine }) {
             {stats.accounts} accounts
           </p>
         </div>
-        <form className={"graph-search" + (miss ? " miss" : "")} onSubmit={find} role="search">
+        <form
+          className={"graph-search" + (miss ? " miss" : "")}
+          onSubmit={find}
+          role="search"
+        >
           <input
             value={q}
-            onChange={(e) => { setQ(e.target.value); setMiss(false); }}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setMiss(false);
+            }}
             placeholder="Search from graph (name, account, phone)"
             aria-label="Search the graph"
           />
-          {q && <button type="button" aria-label="Clear" onClick={() => { setQ(""); setMiss(false); }}>×</button>}
+          {q && (
+            <button
+              type="button"
+              aria-label="Clear"
+              onClick={() => {
+                setQ("");
+                setMiss(false);
+              }}
+            >
+              ×
+            </button>
+          )}
         </form>
         <div className="seg">
           <button
@@ -198,21 +221,31 @@ export default function GraphView({ transactions, calls, scores, engine }) {
         </div>
       </div>
 
-      {miss && <div className="graph-search-msg">No account, name or phone matches “{q}” in this view.</div>}
+      {miss && (
+        <div className="graph-search-msg">
+          No account, name or phone matches “{q}” in this view.
+        </div>
+      )}
 
       {mode === "engine" ? (
         <div className="stat-row">
           <div>
             <b>{data.nodes.length}</b>
-            <span>nodes (top by controller score)</span>
+            <span>nodes</span>
           </div>
           <div>
             <b>{data.links.length}</b>
             <span>edges</span>
           </div>
           <div>
-            <b>{data.nodes.filter((n) => n.kind === "account").length}</b>
-            <span>accounts</span>
+            <b>
+              {
+                data.nodes.filter(
+                  (n) => n.kind === "account" || n.kind === "ENTITY",
+                ).length
+              }
+            </b>
+            <span>entities / accounts</span>
           </div>
         </div>
       ) : (
@@ -275,7 +308,7 @@ export default function GraphView({ transactions, calls, scores, engine }) {
               ? 1.4
               : l.kind === "call"
                 ? 1.1
-                : Math.max(0.6, Math.log10(l.total) - 3)
+                : Math.max(0.6, Math.log10((l.total || 1000) + 1) - 3)
           }
           linkLineDash={(l) =>
             l.kind === "shared" ? [4, 3] : l.kind === "call" ? [2, 3] : null
@@ -306,31 +339,58 @@ export default function GraphView({ transactions, calls, scores, engine }) {
               style={{
                 color:
                   selected.role === "engine"
-                    ? KIND_COLOR[selected.kind]
-                    : ROLE[selected.role].color,
+                    ? KIND_COLOR[selected.kind] ||
+                      KIND_COLOR[selected.type] ||
+                      "#94a3b8"
+                    : ROLE[selected.role]?.color,
               }}
             >
               {selected.role === "engine"
-                ? selected.kind.replace("_", " ")
-                : ROLE[selected.role].label}
+                ? String(selected.type || selected.kind || "node").replace(
+                    "_",
+                    " ",
+                  )
+                : ROLE[selected.role]?.label}
             </div>
             <h3>
-              {selected.role === "engine" ? selected.label : selected.name}
+              {selected.role === "engine"
+                ? selected.label || selected.id
+                : selected.name}
             </h3>
             <div className="mono small muted">{selected.id}</div>
             {selected.role === "engine" ? (
               <>
                 <dl>
-                  <dt>Controller</dt>
-                  <dd>{selected.ctrl.toFixed(2)}</dd>
+                  {selected.ctrl != null && (
+                    <>
+                      <dt>Controller</dt>
+                      <dd>{Number(selected.ctrl).toFixed(2)}</dd>
+                    </>
+                  )}
                   {selected.risk != null && (
                     <>
                       <dt>Risk</dt>
-                      <dd>{selected.risk.toFixed(2)}</dd>
+                      <dd>{Number(selected.risk).toFixed(2)}</dd>
                     </>
                   )}
-                  <dt>Cluster</dt>
-                  <dd>{selected.cluster}</dd>
+                  {selected.amount != null && (
+                    <>
+                      <dt>Amount</dt>
+                      <dd>{inr(selected.amount)}</dd>
+                    </>
+                  )}
+                  {selected.source_file && (
+                    <>
+                      <dt>Source</dt>
+                      <dd>{selected.source_file}</dd>
+                    </>
+                  )}
+                  {selected.cluster != null && (
+                    <>
+                      <dt>Cluster</dt>
+                      <dd>{selected.cluster}</dd>
+                    </>
+                  )}
                 </dl>
                 {selected.reasons?.length > 0 && (
                   <ul className="reasons">
@@ -384,7 +444,7 @@ export default function GraphView({ transactions, calls, scores, engine }) {
                   {selected.risk != null && (
                     <>
                       <dt>Engine risk</dt>
-                      <dd>{selected.risk.toFixed(2)}</dd>
+                      <dd>{Number(selected.risk).toFixed(2)}</dd>
                     </>
                   )}
                 </dl>
@@ -458,9 +518,7 @@ export default function GraphView({ transactions, calls, scores, engine }) {
       )}
       {mode === "engine" && (
         <p className="muted small note">
-          This is the correlation engine's own graph, as computed. Node size is
-          its controller score, which is still being tuned; the Suspicious chain
-          view is the reliable one.
+          This is the correlation engine's own graph, as computed.
         </p>
       )}
       <p className="muted small note">
