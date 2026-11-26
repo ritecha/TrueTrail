@@ -51,7 +51,7 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
         body.append("file", item.file);
         body.append("uploaded_by", actor || "investigator");
         body.append("case_id", caseId);
-        body.append("sync", "true");
+        body.append("sync", "false");
 
         const r = await fetch(`${API}/jaya/api/v1/evidence/upload`, {
           method: "POST",

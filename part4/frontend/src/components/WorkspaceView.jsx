@@ -128,6 +128,48 @@ export default function WorkspaceView({ c, user, onBack }) {
           </button>
         ))}
       </nav>
+      {tab === "overview" && (
+        <div className="panel neon-card">
+          <h2 className="panel-title">Case overview</h2>
+          <p className="muted" style={{ marginBottom: "16px" }}>
+            {c.desc || "Active forensic investigation workspace."}
+          </p>
+
+          <div className="stat-row" style={{ marginBottom: "20px" }}>
+            <div>
+              <b>{transactionsData.length}</b>
+              <span>transactions</span>
+            </div>
+            <div>
+              <b>{timelineData?.events?.length ?? 0}</b>
+              <span>timeline events</span>
+            </div>
+            <div>
+              <b>{engineData?.nodes?.length ?? 0}</b>
+              <span>graph entities</span>
+            </div>
+            <div>
+              <b>{c.evidence?.length ?? 0}</b>
+              <span>uploaded files</span>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button className="neon-btn" onClick={() => setTab("graph")}>
+              View Mule Network
+            </button>
+            <button className="mini" onClick={() => setTab("timeline")}>
+              Open Timeline
+            </button>
+            <button className="mini" onClick={() => setTab("map")}>
+              Open Map
+            </button>
+            <button className="mini" onClick={() => setTab("evidence")}>
+              Upload Evidence
+            </button>
+          </div>
+        </div>
+      )}
 
       {tab === "graph" && (
         <div className="gt-split">

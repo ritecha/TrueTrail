@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const KEY = "truetrail.cases.v1";
+const KEY = "truetrail.cases.v2";
 const EVT = "tt-cases";
 const d = (daysAgo, h = 10) =>
   new Date(Date.now() - daysAgo * 864e5 - (10 - h) * 36e5).toISOString();
@@ -13,7 +13,7 @@ const seed = () => [
   {
     id: "c1",
     caseId: "CR-2026-001",
-    name: "Mule network – Rajesh Kumar Sharma",
+    name: "Demo Case",
     status: "Active",
     primary: true,
     desc: "Layered UPI transfers through mule accounts on 14 March 2026. Data loaded: bank, UPI, calls, IP logs.",
@@ -65,7 +65,8 @@ const fixEvidence = (c) => ({
   ...c,
   evidence: (c.evidence || []).map((ev, i) => ({
     ...ev,
-    id: ev.id ?? `ev-${i}-${(ev.sha256 || ev.sha || ev.file || "").slice(0, 12)}`,
+    id:
+      ev.id ?? `ev-${i}-${(ev.sha256 || ev.sha || ev.file || "").slice(0, 12)}`,
     uid: ev.uid ?? c.owner,
     sha: ev.sha ?? (ev.sha256 || "").slice(0, 16),
     ts: ev.ts ?? c.events?.[0]?.ts ?? new Date().toISOString(),

@@ -45,21 +45,31 @@ async def upload_evidence(
         raise HTTPException(status_code=400, detail=str(exc))
 
     if sync:
-        ev = process_preserved_evidence(
-            job_id=job_id,
-            preserved=preserved,
-            db=db,
-            uploaded_by=uploaded_by,
-            case_id=case_id,
-            hint_evidence_type=hint_evidence_type,
-        )
-        return {
-            "job_id": job_id,
-            "evidence_id": preserved.evidence_id,
-            "sha256": preserved.sha256,
-            "status": "COMPLETED" if ev.evidence_type != "rejected" else "FAILED",
-            "evidence": ev.model_dump(),
-        }
+        try:
+            ev = process_preserved_evidence(
+                job_id=job_id,
+                preserved=preserved,
+                db=db,
+                uploaded_by=uploaded_by,
+                case_id=case_id,
+                hint_evidence_type=hint_evidence_type,
+            )
+            return {
+                "job_id": job_id,
+                "evidence_id": preserved.evidence_id,
+                "sha256": preserved.sha256,
+                "status": "COMPLETED" if ev.evidence_type != "rejected" else "FAILED",
+                "evidence": ev.model_dump(),
+            }
+        except Exception as exc:
+            return {
+                "job_id": job_id,
+                "evidence_id": preserved.evidence_id,
+                "filename": preserved.original_filename,
+                "sha256": preserved.sha256,
+                "status": "PRESERVED_PARSE_ERROR",
+                "detail": str(exc),
+            }
 
     background_tasks.add_task(
         process_preserved_evidence,
