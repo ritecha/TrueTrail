@@ -29,11 +29,16 @@ app.include_router(agent_router)
 
 load_dotenv()
 
-# CORS 
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://digitalevidencebytruetrail-ver.vercel.app/"],
-    allow_origin_regex=r"https://.*\.vercel\.app", 
+    allow_origins=[
+        "https://digitalevidencebytruetrail-ver.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:4173",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_methods=["*"],
     allow_headers=["*"],
 )
