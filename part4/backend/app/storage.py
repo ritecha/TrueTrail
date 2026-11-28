@@ -101,8 +101,7 @@ def preserve_upload(
     work_subdir = _confine_path(config.WORKSPACE_DIR, config.WORKSPACE_DIR / evidence_id)
     work_subdir.mkdir(parents=True, exist_ok=True)
     working_path = _confine_path(config.WORKSPACE_DIR, work_subdir / safe_name)
-    shutil.copy2(vault_path, working_path)
-
+    shutil.copyfile(vault_path, working_path)
     db.append_custody_log(
         log_id=f"cust_{uuid.uuid4().hex[:12]}",
         evidence_id=evidence_id,
