@@ -3,7 +3,6 @@ import "./App.css";
 import ReactLenis from "lenis/react";
 import RippleBackground from "./RippleBackground.jsx";
 import "./effects.css";
-import AgentChat from "./components/AgentChat.jsx";
 import "./agent.css";
 import "./ui.css";
 import "./theme.css";
@@ -24,7 +23,6 @@ export default function App() {
 
   const [view, setView] = useState("cases");
   const [caseId, setCaseId] = useState(null);
-  const [agentOpen, setAgentOpen] = useState(false);
   const cases = useCases();
   const active = cases.find((c) => c.id === caseId);
 
@@ -123,7 +121,6 @@ export default function App() {
         user={appUser}
         theme={theme}
         onToggleTheme={toggleTheme}
-        onAsk={() => setAgentOpen(true)}
       />
 
       <div className="page">
@@ -140,31 +137,6 @@ export default function App() {
         )}
         {view === "about" && <About />}
       </div>
-
-      {agentOpen && (
-        <div className="drawer-back" onClick={() => setAgentOpen(false)}>
-          <aside className="drawer" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="drawer-x"
-              onClick={() => setAgentOpen(false)}
-              aria-label="Close"
-            >
-              ✕
-            </button>
-            {active ? (
-              <AgentChat key={active.id} user={appUser} c={active} />
-            ) : (
-              <div className="panel neon-card agent">
-                <h2 className="panel-title">Case assistant</h2>
-                <p className="muted">
-                  Open a case first. The assistant answers only about the case
-                  you are in.
-                </p>
-              </div>
-            )}
-          </aside>
-        </div>
-      )}
     </ReactLenis>
   );
 }

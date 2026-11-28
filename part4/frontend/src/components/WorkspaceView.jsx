@@ -7,6 +7,7 @@ import { TimelineView, MapView } from "./TimeMap.jsx";
 import UploadCard from "./UploadCard.jsx";
 import TiltCard from "./TiltCard.jsx";
 import GroupChat from "./GroupChat.jsx";
+import AgentChat from "./AgentChat.jsx";
 
 const TABS = [
   ["overview", "Overview"],
@@ -23,55 +24,51 @@ export default function WorkspaceView({ c, user, onBack }) {
   const hasEvidence = c.evidence && c.evidence.length > 0;
   const [tab, setTab] = useState("overview");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [agentOpen, setAgentOpen] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [graphError, setGraphError] = useState(null);
   const [timelineData, setTimelineData] = useState(null);
   const [transactionsData, setTransactionsData] = useState([]);
   const [callsData, setCallsData] = useState([]);
   const [engineData, setEngineData] = useState({ nodes: [], edges: [] });
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
+    const { signal } = controller;
     setLoading(true);
+    setGraphError(null);
+
+    const fetchJson = async (url) => {
+      const r = await fetch(url, { signal });
+      if (!r.ok) {
+        throw new Error(`${r.status} ${r.statusText} (${url})`);
+      }
+      return r.json();
+    };
 
     const fetchData = async () => {
       try {
-        const [tRes, jayaTlRes, gRes, callsRes, engRes] =
-          await Promise.allSettled([
-            fetch(`${API}/api/timeline`).then((r) => r.json()),
-            fetch(`${API}/jaya/api/v1/correlate/timeline?limit=500`).then((r) =>
-              r.json(),
-            ),
-            fetch(`${API}/jaya/api/v1/records/transactions?limit=1000`).then(
-              (r) => r.json(),
-            ),
-            fetch(`${API}/jaya/api/v1/records/calls?limit=1000`).then((r) =>
-              r.json(),
-            ),
-            fetch(`${API}/jaya/api/v1/correlate/graph`).then((r) => r.json()),
-          ]);
+        const [tRes, gRes, callsRes, engRes] = await Promise.allSettled([
+          fetchJson(`${API}/api/timeline`),
+          fetchJson(`${API}/jaya/api/v1/records/transactions?limit=1000`),
+          fetchJson(`${API}/jaya/api/v1/records/calls?limit=1000`),
+          fetchJson(`${API}/jaya/api/v1/correlate/graph`),
+        ]);
 
-        if (!isMounted) return;
+        if (signal.aborted) return;
 
-        const manyaTl =
-          tRes.status === "fulfilled" && tRes.value?.status === "success"
-            ? tRes.value.data
-            : { events: [], sessions: [], geo_tracks: [] };
-        const jayaEvents =
-          jayaTlRes.status === "fulfilled" &&
-          Array.isArray(jayaTlRes.value?.events)
-            ? jayaTlRes.value.events
-            : [];
-
-        setTimelineData({
-          ...manyaTl,
-          case_id: c.caseId,
-          events: [...(manyaTl.events || []), ...jayaEvents],
-        });
+        if (tRes.status === "fulfilled" && tRes.value?.status === "success") {
+          setTimelineData(tRes.value.data);
+        }
 
         if (gRes.status === "fulfilled") {
           const gData = gRes.value;
           setTransactionsData(Array.isArray(gData) ? gData : gData.items || []);
+        } else if (gRes.reason?.name !== "AbortError") {
+          setGraphError(
+            gRes.reason?.message || "Could not load transactions for graph.",
+          );
         }
 
         if (callsRes.status === "fulfilled") {
@@ -83,16 +80,16 @@ export default function WorkspaceView({ c, user, onBack }) {
           setEngineData(engRes.value);
         }
       } catch (err) {
-        console.error("Data fetch error:", err);
+        if (err.name !== "AbortError" && !signal.aborted) {
+          setGraphError(err.message || "Data fetch error");
+        }
       } finally {
-        if (isMounted) setLoading(false);
+        if (!signal.aborted) setLoading(false);
       }
     };
 
     fetchData();
-    return () => {
-      isMounted = false;
-    };
+    return () => controller.abort();
   }, [refreshKey, c.caseId]);
 
   const unread = unreadCount(c, user.id);
@@ -116,14 +113,47 @@ export default function WorkspaceView({ c, user, onBack }) {
 
   return (
     <div>
-      <div className="ws-head">
-        <button className="mini" onClick={onBack}>
-          ← All cases
-        </button>
-        <div className="ws-title">
-          <span className="case-id mono">{c.caseId}</span>
-          <h2>{c.name}</h2>
+      <div
+        className="ws-head"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <button className="mini" onClick={onBack}>
+            ← All cases
+          </button>
+          <div className="ws-title">
+            <span className="case-id mono">{c.caseId}</span>
+            <h2>{c.name}</h2>
+          </div>
         </div>
+
+        <button
+          onClick={() => setAgentOpen(true)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "9px 18px",
+            borderRadius: "999px",
+            border: "1px solid #22d3ee",
+            background:
+              "linear-gradient(135deg, rgba(34,211,238,0.22), rgba(244,114,182,0.22))",
+            color: "#ffffff",
+            fontWeight: 600,
+            fontSize: "13px",
+            cursor: "pointer",
+            boxShadow: "0 0 18px rgba(34,211,238,0.35)",
+          }}
+        >
+          <span>✦</span>
+          <span>Ask Case AI</span>
+        </button>
       </div>
 
       <nav className="subtabs">
@@ -260,40 +290,29 @@ export default function WorkspaceView({ c, user, onBack }) {
       )}
 
       {tab === "graph" && (
-        <div className="gt-split">
-          <aside className="gt-left">
-            <div className="gt-title">Timeline</div>
-            {timelineData ? (
-              <TimelineView data={timelineData} />
-            ) : (
-              <p className="muted p-4">No timeline data from backend.</p>
-            )}
-          </aside>
-          <GraphView
-            transactions={transactionsData}
-            calls={callsData}
-            scores={{}}
-            engine={engineData}
-          />
-        </div>
+        <GraphView
+          transactions={transactionsData}
+          calls={callsData}
+          scores={{}}
+          engine={engineData}
+          loading={loading}
+          error={graphError}
+          onRetry={() => setRefreshKey((k) => k + 1)}
+        />
       )}
 
       {tab === "timeline" &&
         (timelineData ? (
           <TimelineView data={timelineData} />
         ) : (
-          <p className="muted p-4">
-            {loading ? "Loading Timeline..." : "No timeline data."}
-          </p>
+          <p className="muted p-4">Loading Timeline...</p>
         ))}
 
       {tab === "map" &&
         (timelineData ? (
           <MapView data={timelineData} />
         ) : (
-          <p className="muted p-4">
-            {loading ? "Loading Map..." : "No map data."}
-          </p>
+          <p className="muted p-4">Loading Map...</p>
         ))}
 
       {tab === "evidence" && (
@@ -326,6 +345,21 @@ export default function WorkspaceView({ c, user, onBack }) {
 
       {tab === "theories" && <Theories c={c} user={user} />}
       {tab === "chat" && <GroupChat c={c} user={user} />}
+
+      {agentOpen && (
+        <div className="drawer-back" onClick={() => setAgentOpen(false)}>
+          <aside className="drawer" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="drawer-x"
+              onClick={() => setAgentOpen(false)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+            <AgentChat key={c.id} user={user} c={c} />
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

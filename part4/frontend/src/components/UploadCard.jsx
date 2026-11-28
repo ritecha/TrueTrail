@@ -6,6 +6,8 @@ const ACCEPTED = ".csv,.xlsx,.xls,.json,.pdf,.png,.jpg,.jpeg";
 export default function UploadCard({ actor, onDone, caseId = "c1" }) {
   const [files, setFiles] = useState([]);
   const [db, setDb] = useState("checking");
+  const [uploading, setUploading] = useState(false);
+  const [lastMsg, setLastMsg] = useState("");
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -20,14 +22,18 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
 
   const handleDrop = (e) => {
     e.preventDefault();
+    setLastMsg("");
     addFiles(Array.from(e.dataTransfer.files));
   };
 
-  const handleSelect = (e) => addFiles(Array.from(e.target.files));
+  const handleSelect = (e) => {
+    setLastMsg("");
+    addFiles(Array.from(e.target.files));
+  };
 
   const addFiles = (newFiles) => {
     const formatted = newFiles.map((f) => ({
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).slice(2, 11),
       file: f,
       status: "pending",
       progress: 0,
@@ -39,9 +45,13 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
     const pendingFiles = files.filter(
       (f) => f.status === "pending" || f.status === "failed",
     );
-    if (pendingFiles.length === 0) return;
+    if (pendingFiles.length === 0 || uploading) return;
 
-    for (let item of pendingFiles) {
+    setUploading(true);
+    setLastMsg("");
+    let successCount = 0;
+
+    for (const item of pendingFiles) {
       setFiles((prev) =>
         prev.map((f) => (f.id === item.id ? { ...f, status: "uploading" } : f)),
       );
@@ -64,12 +74,8 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
         }
 
         const d = await r.json();
+        successCount++;
 
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === item.id ? { ...f, status: "parsed", progress: 100 } : f,
-          ),
-        );
         onDone?.({
           ...d,
           file:
@@ -85,6 +91,17 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
         );
       }
     }
+
+    // Reset queue & input so the user can upload again immediately
+    if (successCount === pendingFiles.length) {
+      setFiles([]);
+      setLastMsg(`Uploaded ${successCount} file(s). Ready for more.`);
+    } else if (successCount > 0) {
+      setFiles((prev) => prev.filter((f) => f.status === "failed"));
+      setLastMsg(`Uploaded ${successCount} file(s); some failed.`);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setUploading(false);
   };
 
   return (
@@ -142,6 +159,15 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
         accept={ACCEPTED}
       />
 
+      {lastMsg && (
+        <div
+          className="small"
+          style={{ marginTop: "8px", color: "var(--risk-low)" }}
+        >
+          {lastMsg}
+        </div>
+      )}
+
       {files.length > 0 && (
         <div
           style={{ marginTop: "12px", maxHeight: "150px", overflowY: "auto" }}
@@ -195,12 +221,7 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
                     <span className="muted">Pending</span>
                   )}
                   {f.status === "uploading" && (
-                    <span style={{ color: "var(--risk-med)" }}>
-                      Processing…
-                    </span>
-                  )}
-                  {f.status === "parsed" && (
-                    <span style={{ color: "var(--risk-low)" }}>Parsed</span>
+                    <span style={{ color: "var(--risk-med)" }}>Uploading…</span>
                   )}
                   {f.status === "failed" && (
                     <span style={{ color: "var(--risk-high)" }}>Failed</span>
@@ -216,9 +237,9 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
         className="neon-btn"
         onClick={uploadAll}
         style={{ marginTop: "12px", width: "100%" }}
-        disabled={files.length === 0}
+        disabled={files.length === 0 || uploading}
       >
-        Upload Files
+        {uploading ? "Uploading…" : "Upload Files"}
       </button>
     </div>
   );

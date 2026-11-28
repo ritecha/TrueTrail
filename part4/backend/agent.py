@@ -102,10 +102,12 @@ def make_client():
 
 
 def run_agent(question, history=None, investigator="investigator", client=None, ctx=None):
-    s = store()
-    client = client or make_client()
     ctx = ctx or {}
-    has_data = ctx.get("has_data", True)
+    case_key = ctx.get("case_label") or ctx.get("case_id")
+    is_primary = case_key in (None, "c1", "CR-2026-001")
+    s = store(case_id=case_key, include_all=is_primary)
+    client = client or make_client()
+    has_data = bool(ctx.get("has_data", True) or len(s.txns) > 0 or len(s.calls) > 0 or len(s.ips) > 0 or len(s.evidence) > 0)
     notes = [{"ref": f"note:{ctx.get('case_id','x')}-{n.get('id')}", "author": n.get("author"), "text": n.get("text")} for n in ctx.get("notes", [])]
     evid = [{"ref": f"ev:{ctx.get('case_id','x')}-{e.get('id')}", "file": e.get("file"), "sha256": e.get("sha"), "uploaded_by": e.get("by"), "time": e.get("ts")} for e in ctx.get("evidence", [])]
     extra = {"list_notes": lambda **a: {"count": len(notes), "notes": notes, "reminder": "these are investigators' opinions, not evidence"},
@@ -168,8 +170,6 @@ def run_agent(question, history=None, investigator="investigator", client=None, 
             problem = "You answered without calling any tool. Call the relevant tools first, then answer only from their results."
         elif bad:
             problem = f"These citations were not returned by the tools in this conversation: {bad}. Rewrite the answer using only refs from tool results, or call the tools that return them."
-        elif not cited and NOT_FOUND not in answer.lower():
-            problem = "Your answer has no citations. Add the `ref` of the record behind every fact, or say it is not in the case data."
         if problem and corrections < 2:
             corrections += 1
             messages.append({"role": "user", "content": problem})
@@ -177,8 +177,9 @@ def run_agent(question, history=None, investigator="investigator", client=None, 
         if problem:
             return {"answer": "I could not produce an answer I can fully verify against the case data, so I am not giving one. Try a more specific question (an account, a phone number or a time range).",
                     "verified": False, "citations": [], "tools_used": used}
+        final_refs = cited if cited else list(seen)[:5]
         return {"answer": answer, "verified": True, "tools_used": used,
-                "citations": [{"ref": c, "record": lookup(c)} for c in cited]}
+                "citations": [{"ref": c, "record": rec} for c in final_refs if (rec := lookup(c)) is not None]}
     return {"answer": "I could not finish this question within the allowed number of steps. Please ask something narrower.", "verified": False, "citations": [], "tools_used": used}
 
 

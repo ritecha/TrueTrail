@@ -44,6 +44,35 @@ def _load(name, *fallbacks):
     return []
 
 
+def _load_from_forensics_db(case_id=None, include_all=True):
+    db_file = HERE / "data" / "forensics.db"
+    if not db_file.exists():
+        return [], [], [], []
+    with sqlite3.connect(db_file) as conn:
+        conn.row_factory = sqlite3.Row
+        if include_all or not case_id:
+            ev_rows = conn.execute(
+                "SELECT evidence_id, filename, evidence_type, sha256, record_count, ingested_at FROM evidence_items"
+            ).fetchall()
+            txns = [json.loads(r[0]) for r in conn.execute("SELECT payload_json FROM transactions").fetchall()]
+            calls = [json.loads(r[0]) for r in conn.execute("SELECT payload_json FROM call_records").fetchall()]
+            ips = [json.loads(r[0]) for r in conn.execute("SELECT payload_json FROM ip_sessions").fetchall()]
+        else:
+            ev_rows = conn.execute(
+                "SELECT evidence_id, filename, evidence_type, sha256, record_count, ingested_at FROM evidence_items WHERE case_id = ?",
+                (case_id,),
+            ).fetchall()
+            ev_ids = [r["evidence_id"] for r in ev_rows]
+            if not ev_ids:
+                return [], [], [], []
+            ph = ",".join("?" for _ in ev_ids)
+            txns = [json.loads(r[0]) for r in conn.execute(f"SELECT payload_json FROM transactions WHERE evidence_id IN ({ph})", ev_ids).fetchall()]
+            calls = [json.loads(r[0]) for r in conn.execute(f"SELECT payload_json FROM call_records WHERE evidence_id IN ({ph})", ev_ids).fetchall()]
+            ips = [json.loads(r[0]) for r in conn.execute(f"SELECT payload_json FROM ip_sessions WHERE evidence_id IN ({ph})", ev_ids).fetchall()]
+        evidence = [dict(r) for r in ev_rows]
+    return txns, calls, ips, evidence
+
+
 def parse_ts(s, end_of_day=False):
     """ISO string -> aware UTC datetime. Accepts '2026-03-14', '2026-03-14T05:40', '...Z'."""
     if not s:
@@ -65,11 +94,12 @@ def inr(n):
 
 
 class CaseStore:
-    def __init__(self):
-        self.txns = _load("transactions.json", FRONT / "transactions.json")
-        self.calls = _load("calls.json")
-        self.ips = _load("ip_sessions.json")
-        self.evidence = _load("evidence_items.json")
+    def __init__(self, case_id=None, include_all=True):
+        txns, calls, ips, evidence = _load_from_forensics_db(case_id=case_id, include_all=include_all)
+        self.txns = txns or (_load("transactions.json", FRONT / "transactions.json") if include_all else [])
+        self.calls = calls or (_load("calls.json") if include_all else [])
+        self.ips = ips or (_load("ip_sessions.json") if include_all else [])
+        self.evidence = evidence or (_load("evidence_items.json") if include_all else [])
         self.scores = {}
         for p in (os.getenv("TT_SCORES", ""), FRONT / "engineScores.json"):
             if p and Path(p).exists():
@@ -374,9 +404,5 @@ class CaseStore:
                 "accounts": len(self.nodes), "flagged": len(self.flagged), "ml_scores_loaded": bool(self.scores)}
 
 
-_store = None
-def store():
-    global _store
-    if _store is None:
-        _store = CaseStore()
-    return _store
+def store(case_id=None, include_all=True):
+    return CaseStore(case_id=case_id, include_all=include_all)
