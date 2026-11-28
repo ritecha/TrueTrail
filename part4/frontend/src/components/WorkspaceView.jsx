@@ -95,14 +95,18 @@ export default function WorkspaceView({ c, user, onBack }) {
   const unread = unreadCount(c, user.id);
 
   const onUploaded = (d) => {
+    const fileName = d.file || d.filename || "Uploaded file";
     updateCase(c.id, (x) => {
-      x.evidence.push({
+      const entry = {
         id: nid(),
         uid: user.id,
-        file: d.file || d.filename || "Uploaded file",
+        file: fileName,
         sha: d.sha256 ? d.sha256.slice(0, 16) : "mock",
         ts: new Date().toISOString(),
-      });
+      };
+      const idx = x.evidence.findIndex((e) => e.file === fileName);
+      if (idx >= 0) x.evidence[idx] = entry;
+      else x.evidence.push(entry);
       return x;
     });
     setRefreshKey((k) => k + 1);
