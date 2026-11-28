@@ -411,11 +411,44 @@ export default function GeoMap3D({ data }) {
     let isDemoRoutes = false;
     if (routeList.length === 0) {
       isDemoRoutes = true;
+      const demoHubMap = new Map();
       for (const dr of DEMO_ROUTES_FIXTURE) {
         const srcKey =
           scope === "state" ? dr.srcState : `${dr.srcCity}, ${dr.srcState}`;
         const dstKey =
           scope === "state" ? dr.dstState : `${dr.dstCity}, ${dr.dstState}`;
+
+        if (!demoHubMap.has(srcKey)) {
+          demoHubMap.set(srcKey, {
+            key: srcKey,
+            name: scope === "state" ? dr.srcState : dr.srcCity,
+            state: dr.srcState,
+            lat: dr.srcLat,
+            lon: dr.srcLon,
+            count: dr.count,
+            suspectCount: dr.uniqueSuspects,
+            metricVal: dr.count,
+            inCount: 0,
+            outCount: dr.count,
+            connectedList: [dstKey],
+          });
+        }
+        if (!demoHubMap.has(dstKey)) {
+          demoHubMap.set(dstKey, {
+            key: dstKey,
+            name: scope === "state" ? dr.dstState : dr.dstCity,
+            state: dr.dstState,
+            lat: dr.dstLat,
+            lon: dr.dstLon,
+            count: dr.count,
+            suspectCount: dr.uniqueSuspects,
+            metricVal: dr.count,
+            inCount: dr.count,
+            outCount: 0,
+            connectedList: [srcKey],
+          });
+        }
+
         routeList.push({
           id: dr.id,
           srcKey,
@@ -436,6 +469,9 @@ export default function GeoMap3D({ data }) {
             },
           ],
         });
+      }
+      if (hubList.length === 0) {
+        hubList.push(...demoHubMap.values());
       }
     }
 
@@ -535,21 +571,9 @@ export default function GeoMap3D({ data }) {
         source: "agg-arcs",
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": [
-            "case",
-            ["boolean", ["get", "highlighted"], false],
-            "#38bdf8",
-            ["boolean", ["get", "dimmed"], false],
-            "rgba(100,116,139,0.18)",
-            "#f472b6",
-          ],
-          "line-width": ["get", "width"],
-          "line-opacity": [
-            "case",
-            ["boolean", ["get", "dimmed"], false],
-            0.2,
-            0.88,
-          ],
+          "line-color": "#f472b6",
+          "line-width": 3.5,
+          "line-opacity": 0.9,
         },
       });
 
@@ -654,7 +678,7 @@ export default function GeoMap3D({ data }) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady) return;
+    if (!map || (!mapReady && !map.isStyleLoaded())) return;
 
     const showHubs = lod <= 2;
     const pillarRadius = lod === 1 ? 0.38 : 0.16;
