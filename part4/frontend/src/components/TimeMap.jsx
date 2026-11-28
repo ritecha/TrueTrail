@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  CircleMarker,
-  Popup,
-  Polyline,
-} from "react-leaflet";
-import "leaflet/dist/leaflet.css";
+import GeoMap3D from "./GeoMap3D.jsx";
 
 const TYPES = {
   UPI: { label: "UPI payment", color: "#f472b6" },
@@ -15,21 +8,68 @@ const TYPES = {
   IP_SESSION: { label: "IP session", color: "#fbbf24" },
   TOWER_PING: { label: "Tower ping", color: "#a78bfa" },
 };
-const DEFAULT_ON = ["UPI", "NEFT", "CALL", "IP_SESSION"];
+const DEFAULT_ON = ["UPI", "NEFT", "CALL", "IP_SESSION", "TOWER_PING"];
 
 const TYPE_MAP = {
   cdr: "CALL",
   call: "CALL",
   ipdr: "IP_SESSION",
   ip_session: "IP_SESSION",
+  long_session: "IP_SESSION",
+  digital_arrest_signature: "IP_SESSION",
   ping: "TOWER_PING",
   tower_ping: "TOWER_PING",
   upi: "UPI",
+  upi_log: "UPI",
   upi_transaction: "UPI",
   neft: "NEFT",
+  bank_statement: "NEFT",
   bank_transaction: "NEFT",
   transaction: "UPI",
 };
+
+// Clearly-separated demonstration fixture used ONLY when backend timeline data is unavailable
+const DEMO_TIMELINE_EVENTS = [
+  {
+    event_id: "demo_call_1",
+    type: "CALL",
+    start_utc: "2026-03-14T05:12:00Z",
+    entities: { direction: "IN", counterparty: "+91-98110-44210" },
+  },
+  {
+    event_id: "demo_ip_1",
+    type: "IP_SESSION",
+    start_utc: "2026-03-14T05:18:00Z",
+    entities: { ip: "103.21.58.14", dest_ip: "49.114.43.178" },
+  },
+  {
+    event_id: "demo_upi_1",
+    type: "UPI",
+    amount: 48500,
+    start_utc: "2026-03-14T05:25:00Z",
+    entities: { payee_id: "mule01@okaxis" },
+  },
+  {
+    event_id: "demo_neft_1",
+    type: "NEFT",
+    amount: 185000,
+    start_utc: "2026-03-14T05:34:00Z",
+    entities: { payee_id: "ACCT-99201482" },
+  },
+  {
+    event_id: "demo_ping_1",
+    type: "TOWER_PING",
+    start_utc: "2026-03-14T05:41:00Z",
+    latitude: 28.6139,
+    longitude: 77.209,
+  },
+  {
+    event_id: "demo_call_2",
+    type: "CALL",
+    start_utc: "2026-03-14T05:48:00Z",
+    entities: { direction: "OUT", counterparty: "+91-98765-11022" },
+  },
+];
 
 const normType = (raw) => {
   const k = String(raw || "").toLowerCase();
@@ -108,12 +148,11 @@ function describe(e) {
   }
 }
 
-// Snake layout constants
-const ROW_SPACING = 152; // Generous vertical distance between parallel rows
+const ROW_SPACING = 152;
 const TOP_OFFSET = 52;
 const BOTTOM_PAD = 96;
-const PAD_X = 76; // Leaves clean margin for smooth left/right U-turn curves
-const U_EXTENT = 56; // Bézier curve horizontal bulge for smooth U-turn
+const PAD_X = 76;
+const U_EXTENT = 56;
 
 export function TimelineView({ data }) {
   const [on, setOn] = useState(() => new Set(DEFAULT_ON));
@@ -135,9 +174,9 @@ export function TimelineView({ data }) {
     return () => ro.disconnect();
   }, []);
 
-  const normalizedEvents = useMemo(() => {
+  const { normalizedEvents, isDemo } = useMemo(() => {
     const raw = Array.isArray(data?.events) ? data.events : [];
-    return raw
+    const parsed = raw
       .map((e, idx) => {
         const sDate = toDate(e.start_utc || e.timestamp_utc || e.timestamp);
         if (!sDate) return null;
@@ -153,6 +192,16 @@ export function TimelineView({ data }) {
         };
       })
       .filter(Boolean);
+
+    if (parsed.length > 0) {
+      return { normalizedEvents: parsed, isDemo: false };
+    }
+
+    const demoParsed = DEMO_TIMELINE_EVENTS.map((e) => {
+      const ms = toDate(e.start_utc).getTime();
+      return { ...e, startMs: ms, endMs: ms };
+    });
+    return { normalizedEvents: demoParsed, isDemo: true };
   }, [data]);
 
   const counts = useMemo(() => {
@@ -174,7 +223,6 @@ export function TimelineView({ data }) {
     [filtered, visibleLimit],
   );
 
-  // Compute responsive columns & exact (x, y) coordinates + single continuous SVG snake path
   const layout = useMemo(() => {
     const innerW = Math.max(180, width - PAD_X * 2);
     const cols = Math.max(1, Math.min(5, Math.floor(innerW / 185) + 1));
@@ -194,7 +242,6 @@ export function TimelineView({ data }) {
     const totalRows = placed.length > 0 ? placed[placed.length - 1].row + 1 : 1;
     const totalHeight = TOP_OFFSET + (totalRows - 1) * ROW_SPACING + BOTTOM_PAD;
 
-    // Build ONE continuous SVG snake path + directional arrowheads
     let pathD = "";
     const arrows = [];
 
@@ -212,8 +259,6 @@ export function TimelineView({ data }) {
       } else {
         const leftX = PAD_X;
         const rightX = PAD_X + (cols - 1) * colStep;
-
-        // Slight lead-in before first node like reference diagram
         pathD = `M ${Math.max(18, leftX - 34)} ${placed[0].y} L ${placed[0].x} ${placed[0].y}`;
 
         for (let r = 0; r < totalRows; r++) {
@@ -222,7 +267,6 @@ export function TimelineView({ data }) {
           const y = TOP_OFFSET + r * ROW_SPACING;
           const hasNextRow = r < totalRows - 1;
 
-          // Horizontal segments & arrows between adjacent nodes in this row
           for (let i = 0; i < rowItems.length - 1; i++) {
             const a = rowItems[i];
             const b = rowItems[i + 1];
@@ -234,7 +278,6 @@ export function TimelineView({ data }) {
             });
           }
 
-          // Smooth curved U-turn to next row
           if (hasNextRow) {
             const turnX = rtl ? leftX : rightX;
             const lastItem = rowItems[rowItems.length - 1];
@@ -284,6 +327,11 @@ export function TimelineView({ data }) {
           <p className="muted small">
             Case {data?.case_id || "active"} · Showing {visibleEvents.length} of{" "}
             {filtered.length} filtered events ({normalizedEvents.length} total)
+            {isDemo && (
+              <span style={{ color: "#fbbf24", marginLeft: 8 }}>
+                · Demo Preview (backend unavailable)
+              </span>
+            )}
           </p>
         </div>
       </div>
@@ -359,7 +407,6 @@ export function TimelineView({ data }) {
               height: layout.totalHeight,
             }}
           >
-            {/* ONE continuous snake-shaped SVG path passing through every node */}
             <svg
               width={width}
               height={layout.totalHeight}
@@ -387,7 +434,6 @@ export function TimelineView({ data }) {
               ))}
             </svg>
 
-            {/* Circular Nodes + Timestamps + Compact Explanation Boxes */}
             {layout.placed.map(({ e, x, y }) => {
               const meta = TYPES[e.type] ?? {
                 label: e.type,
@@ -424,7 +470,6 @@ export function TimelineView({ data }) {
                     transition: "opacity 0.16s ease",
                   }}
                 >
-                  {/* Timestamp cleanly above node */}
                   <div
                     className="mono muted"
                     style={{
@@ -437,7 +482,6 @@ export function TimelineView({ data }) {
                     {shortTime(e.startMs)}
                   </div>
 
-                  {/* Circular Event Node sitting directly on the snake line */}
                   <div
                     style={{
                       width: 28,
@@ -465,7 +509,6 @@ export function TimelineView({ data }) {
                     />
                   </div>
 
-                  {/* Small vertical stem connecting node to compact box */}
                   <div
                     style={{
                       width: 1.5,
@@ -474,7 +517,6 @@ export function TimelineView({ data }) {
                     }}
                   />
 
-                  {/* Small, Compact 2-line Summary Box */}
                   <div
                     style={{
                       width: "100%",
@@ -548,78 +590,6 @@ export function TimelineView({ data }) {
     </div>
   );
 }
-
-// export function MapView({ data }) {
-//   const feats = data?.geo_tracks?.[0]?.geojson?.features ?? [];
-//   const geoPath =
-//     feats
-//       .find((f) => f.properties?.kind === "path")
-//       ?.geometry?.coordinates?.map((c) => [c[1], c[0]]) ?? [];
-//   const geoPings = feats.filter((f) => f.properties?.kind === "ping");
-
-//   const eventPts = (data?.events || [])
-//     .filter((e) => e.latitude != null && e.longitude != null)
-//     .map((e) => ({
-//       pos: [Number(e.latitude), Number(e.longitude)],
-//       label: `${e.event_type || "EVENT"} · ${utc(e.timestamp_utc || e.start_utc)}`,
-//     }));
-
-//   const trackPts = (data?.geo_tracks?.[0]?.points || []).map((p) => ({
-//     pos: [Number(p.latitude), Number(p.longitude)],
-//     label: `Tower ${p.tower_id || ""} · ${utc(p.timestamp)}`,
-//   }));
-
-//   const markers = geoPings.length
-//     ? geoPings.map((p) => ({
-//         pos: [p.geometry.coordinates[1], p.geometry.coordinates[0]],
-//         label: utc(p.properties?.time_utc),
-//       }))
-//     : trackPts.length
-//       ? trackPts
-//       : eventPts;
-
-//   const path = geoPath.length ? geoPath : markers.map((m) => m.pos);
-
-//   return (
-//     <div
-//       className="panel neon-card"
-//       style={{ padding: 0, overflow: "hidden", height: 560 }}
-//     >
-//       <MapContainer
-//         center={path[0] ?? [28.6139, 77.209]}
-//         zoom={5}
-//         style={{ height: "100%", width: "100%", background: "var(--bg-base)" }}
-//       >
-//         <TileLayer
-//           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-//           attribution="&copy; OpenStreetMap contributors"
-//         />
-//         {path.length > 1 && (
-//           <Polyline
-//             positions={path}
-//             pathOptions={{ color: "#22d3ee", weight: 2, opacity: 0.7 }}
-//           />
-//         )}
-//         {markers.map((m, i) => (
-//           <CircleMarker
-//             key={i}
-//             center={m.pos}
-//             radius={5}
-//             pathOptions={{
-//               color: "#f472b6",
-//               fillColor: "#f472b6",
-//               fillOpacity: 0.7,
-//               weight: 1,
-//             }}
-//           >
-//             <Popup>{m.label}</Popup>
-//           </CircleMarker>
-//         ))}
-//       </MapContainer>
-//     </div>
-//   );
-// }
-import GeoMap3D from "./GeoMap3D.jsx";
 
 export function MapView({ data }) {
   return <GeoMap3D data={data} />;

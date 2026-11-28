@@ -33,6 +33,66 @@ const EVENT_COLORS = {
   NEFT: "#fb7185",
 };
 
+// Strictly-separated demonstration fixture used ONLY when backend geo-routes are unavailable
+const DEMO_ROUTES_FIXTURE = [
+  {
+    id: "demo_kol_blr",
+    srcState: "West Bengal",
+    srcCity: "Kolkata",
+    srcLat: 22.5726,
+    srcLon: 88.3639,
+    dstState: "Karnataka",
+    dstCity: "Bengaluru",
+    dstLat: 12.9716,
+    dstLon: 77.5946,
+    count: 45,
+    uniqueSuspects: 12,
+    categories: ["UPI", "CALL"],
+  },
+  {
+    id: "demo_del_bom",
+    srcState: "Delhi",
+    srcCity: "New Delhi",
+    srcLat: 28.6139,
+    srcLon: 77.209,
+    dstState: "Maharashtra",
+    dstCity: "Mumbai",
+    dstLat: 19.076,
+    dstLon: 72.8777,
+    count: 30,
+    uniqueSuspects: 9,
+    categories: ["NEFT", "IP_SESSION"],
+  },
+  {
+    id: "demo_kol_del",
+    srcState: "West Bengal",
+    srcCity: "Kolkata",
+    srcLat: 22.5726,
+    srcLon: 88.3639,
+    dstState: "Delhi",
+    dstCity: "New Delhi",
+    dstLat: 28.6139,
+    dstLon: 77.209,
+    count: 20,
+    uniqueSuspects: 6,
+    categories: ["CALL", "TOWER_PING"],
+  },
+  {
+    id: "demo_hyd_maa",
+    srcState: "Telangana",
+    srcCity: "Hyderabad",
+    srcLat: 17.385,
+    srcLon: 78.4867,
+    dstState: "Tamil Nadu",
+    dstCity: "Chennai",
+    dstLat: 13.0827,
+    dstLon: 80.2707,
+    count: 14,
+    uniqueSuspects: 5,
+    categories: ["UPI"],
+  },
+];
+
 function classifyRegion(lat, lon, explicitCity, explicitState) {
   if (explicitCity && explicitState) {
     return { city: explicitCity, state: explicitState };
@@ -348,7 +408,38 @@ export default function GeoMap3D({ data }) {
       };
     });
 
-    return { hubList, routeList };
+    let isDemoRoutes = false;
+    if (routeList.length === 0) {
+      isDemoRoutes = true;
+      for (const dr of DEMO_ROUTES_FIXTURE) {
+        const srcKey =
+          scope === "state" ? dr.srcState : `${dr.srcCity}, ${dr.srcState}`;
+        const dstKey =
+          scope === "state" ? dr.dstState : `${dr.dstCity}, ${dr.dstState}`;
+        routeList.push({
+          id: dr.id,
+          srcKey,
+          dstKey,
+          srcName: scope === "state" ? dr.srcState : dr.srcCity,
+          dstName: scope === "state" ? dr.dstState : dr.dstCity,
+          count: dr.count,
+          uniqueSuspects: dr.uniqueSuspects,
+          categoryList: dr.categories,
+          coords: makeCurvedArc(dr.srcLon, dr.srcLat, dr.dstLon, dr.dstLat),
+          items: [
+            {
+              id: dr.id + "_sample",
+              suspect: "Demo Route (no backend geo-links)",
+              counterparty: `${dr.srcCity} → ${dr.dstCity}`,
+              category: dr.categories.join(", "),
+              timestamp: "Demo fixture",
+            },
+          ],
+        });
+      }
+    }
+
+    return { hubList, routeList, isDemoRoutes };
   }, [
     filteredPoints,
     rawConnections,
@@ -787,6 +878,11 @@ export default function GeoMap3D({ data }) {
             {filteredPoints.length} geo events · {aggregated.routeList.length}{" "}
             aggregated routes ·{" "}
             <span style={{ color: "#22d3ee" }}>{lodName}</span> ({zoomVal}x)
+            {aggregated.isDemoRoutes && (
+              <span style={{ color: "#fbbf24", marginLeft: 8 }}>
+                · Demo Arcs (no backend routes)
+              </span>
+            )}
           </p>
         </div>
 
