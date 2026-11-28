@@ -32,7 +32,7 @@ load_dotenv()
 # CORS 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=["https://digitalevidencebytruetrail-ver.vercel.app/"],
     allow_origin_regex=r"https://.*\.vercel\.app", 
     allow_methods=["*"],
     allow_headers=["*"],
