@@ -1,13 +1,30 @@
 import { useEffect, useState, useRef } from "react";
 import { API } from "./Ledger.jsx";
 
-const ACCEPTED = ".csv,.xlsx,.xls,.json,.pdf,.png,.jpg,.jpeg";
+const ACCEPTED = ".csv,.xlsx,.xls,.json,.pdf,.png,.jpg,.jpeg,.tsv,.txt";
+
+async function waitForJob(jobId, maxWaitMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise((res) => setTimeout(res, 600));
+    const r = await fetch(
+      `${API}/jaya/api/v1/jobs/${encodeURIComponent(jobId)}`,
+    );
+    if (!r.ok) break;
+    const job = await r.json();
+    if (job.status === "COMPLETED" || job.status === "FAILED") {
+      return job;
+    }
+  }
+  return null;
+}
 
 export default function UploadCard({ actor, onDone, caseId = "c1" }) {
   const [files, setFiles] = useState([]);
   const [db, setDb] = useState("checking");
   const [uploading, setUploading] = useState(false);
   const [lastMsg, setLastMsg] = useState("");
+  const [errMsg, setErrMsg] = useState("");
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -23,11 +40,13 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
   const handleDrop = (e) => {
     e.preventDefault();
     setLastMsg("");
+    setErrMsg("");
     addFiles(Array.from(e.dataTransfer.files));
   };
 
   const handleSelect = (e) => {
     setLastMsg("");
+    setErrMsg("");
     addFiles(Array.from(e.target.files));
   };
 
@@ -49,7 +68,9 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
 
     setUploading(true);
     setLastMsg("");
+    setErrMsg("");
     let successCount = 0;
+    let firstError = "";
 
     for (const item of pendingFiles) {
       setFiles((prev) =>
@@ -70,12 +91,19 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
 
         if (!r.ok) {
           const errData = await r.json().catch(() => ({}));
-          throw new Error(errData.detail || "Upload failed");
+          throw new Error(errData.detail || `Upload failed (${r.status})`);
         }
 
         const d = await r.json();
-        successCount++;
 
+        if (d.job_id) {
+          const job = await waitForJob(d.job_id);
+          if (job?.status === "FAILED") {
+            throw new Error(job.error || "File rejected by parser");
+          }
+        }
+
+        successCount++;
         onDone?.({
           ...d,
           file:
@@ -86,13 +114,14 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
         });
       } catch (err) {
         console.error("Upload Error:", err);
+        if (!firstError) firstError = `${item.file.name}: ${err.message}`;
         setFiles((prev) =>
           prev.map((f) => (f.id === item.id ? { ...f, status: "failed" } : f)),
         );
       }
     }
 
-    // Reset queue & input so the user can upload again immediately
+    if (firstError) setErrMsg(firstError);
     if (successCount === pendingFiles.length) {
       setFiles([]);
       setLastMsg(`Uploaded ${successCount} file(s). Ready for more.`);
@@ -165,6 +194,14 @@ export default function UploadCard({ actor, onDone, caseId = "c1" }) {
           style={{ marginTop: "8px", color: "var(--risk-low)" }}
         >
           {lastMsg}
+        </div>
+      )}
+      {errMsg && (
+        <div
+          className="small"
+          style={{ marginTop: "6px", color: "var(--risk-high)" }}
+        >
+          {errMsg}
         </div>
       )}
 

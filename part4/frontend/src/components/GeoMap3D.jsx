@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Map as MapLibreMap, Popup as MapPopup } from "maplibre-gl";
+import { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 const INDIA_CENTER = [78.9629, 21.5937];
@@ -33,7 +33,6 @@ const EVENT_COLORS = {
   NEFT: "#fb7185",
 };
 
-// Strictly-separated demonstration fixture used ONLY when backend geo-routes are unavailable
 const DEMO_ROUTES_FIXTURE = [
   {
     id: "demo_kol_blr",
@@ -112,7 +111,7 @@ function classifyRegion(lat, lon, explicitCity, explicitState) {
   };
 }
 
-function makeCurvedArc(lon1, lat1, lon2, lat2, steps = 24) {
+function makeCurvedArc(lon1, lat1, lon2, lat2, steps = 28) {
   const dx = lon2 - lon1;
   const dy = lat2 - lat1;
   const dist = Math.hypot(dx, dy) || 0.001;
@@ -128,16 +127,6 @@ function makeCurvedArc(lon1, lat1, lon2, lat2, steps = 24) {
   return coords;
 }
 
-function makeHexPolygon(lon, lat, radiusDeg = 0.28) {
-  const pts = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (Math.PI / 3) * i;
-    pts.push([lon + Math.cos(a) * radiusDeg, lat + Math.sin(a) * radiusDeg]);
-  }
-  pts.push(pts[0]);
-  return [pts];
-}
-
 function getLodLevel(z) {
   if (z < 5.3) return 1;
   if (z < 8.5) return 2;
@@ -145,17 +134,27 @@ function getLodLevel(z) {
   return 4;
 }
 
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
 export default function GeoMap3D({ data }) {
   const mapEl = useRef(null);
+  const canvasRef = useRef(null);
   const mapRef = useRef(null);
-  const popupRef = useRef(null);
   const historyRef = useRef([]);
+  const stateRef = useRef({});
 
   const [lod, setLod] = useState(1);
   const [zoomVal, setZoomVal] = useState(INDIA_ZOOM);
   const [is3D, setIs3D] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
 
   const [stateFilter, setStateFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
@@ -165,6 +164,7 @@ export default function GeoMap3D({ data }) {
 
   const [selectedLoc, setSelectedLoc] = useState(null);
   const [selectedArc, setSelectedArc] = useState(null);
+  const [hoverInfo, setHoverInfo] = useState(null);
 
   const geoPoints = useMemo(() => {
     const pts = [];
@@ -403,6 +403,7 @@ export default function GeoMap3D({ data }) {
         ...r,
         count: r.items.length,
         uniqueSuspects: r.suspects.size,
+        suspectList: [...r.suspects],
         categoryList: [...r.categories],
         coords: makeCurvedArc(sLon, sLat, dLon, dLat),
       };
@@ -457,6 +458,7 @@ export default function GeoMap3D({ data }) {
           dstName: scope === "state" ? dr.dstState : dr.dstCity,
           count: dr.count,
           uniqueSuspects: dr.uniqueSuspects,
+          suspectList: ["Demo Fixture"],
           categoryList: dr.categories,
           coords: makeCurvedArc(dr.srcLon, dr.srcLat, dr.dstLon, dr.dstLat),
           items: [
@@ -485,6 +487,186 @@ export default function GeoMap3D({ data }) {
     directionFilter,
   ]);
 
+  stateRef.current = {
+    aggregated,
+    filteredPoints,
+    lod,
+    selectedLoc,
+    selectedArc,
+    is3D,
+  };
+
+  const drawOverlay = useCallback(() => {
+    const map = mapRef.current;
+    const canvas = canvasRef.current;
+    if (!map || !canvas) return;
+
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (
+      canvas.width !== Math.round(w * dpr) ||
+      canvas.height !== Math.round(h * dpr)
+    ) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const {
+      aggregated: agg,
+      filteredPoints: pts,
+      lod: curLod,
+      selectedLoc: selLoc,
+      selectedArc: selArc,
+      is3D: tilt3D,
+    } = stateRef.current;
+
+    if (!agg) return;
+
+    for (const r of agg.routeList) {
+      const touchesSel =
+        selLoc && (r.srcKey === selLoc.key || r.dstKey === selLoc.key);
+      const isSelected = selArc && selArc.id === r.id;
+      const dimmed = !!selLoc && !touchesSel;
+
+      const screenPts = r.coords.map((c) => map.project(c));
+      if (screenPts.length < 2) continue;
+
+      const start = screenPts[0];
+      const end = screenPts[screenPts.length - 1];
+      const pxDist = Math.hypot(end.x - start.x, end.y - start.y);
+      const maxLift = tilt3D ? Math.min(44, pxDist * 0.16) : 0;
+
+      const lifted = screenPts.map((pt, idx) => {
+        const t = idx / (screenPts.length - 1);
+        return { x: pt.x, y: pt.y - Math.sin(t * Math.PI) * maxLift };
+      });
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(lifted[0].x, lifted[0].y);
+      for (let i = 1; i < lifted.length; i++) {
+        ctx.lineTo(lifted[i].x, lifted[i].y);
+      }
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = isSelected || touchesSel ? "#22d3ee" : "#f472b6";
+      ctx.globalAlpha = dimmed ? 0.18 : 0.9;
+      ctx.lineWidth = Math.min(6.5, 1.8 + Math.log2(r.count + 1) * 1.15);
+      ctx.shadowColor = isSelected || touchesSel ? "#22d3ee" : "#f472b6";
+      ctx.shadowBlur = dimmed ? 0 : 10;
+      ctx.stroke();
+
+      const midIdx = Math.floor(lifted.length * 0.55);
+      const p1 = lifted[Math.max(0, midIdx - 1)];
+      const p2 = lifted[midIdx];
+      const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      ctx.fillStyle = isSelected || touchesSel ? "#22d3ee" : "#f472b6";
+      ctx.beginPath();
+      ctx.moveTo(p2.x + Math.cos(ang) * 5, p2.y + Math.sin(ang) * 5);
+      ctx.lineTo(
+        p2.x - Math.cos(ang - 0.55) * 8,
+        p2.y - Math.sin(ang - 0.55) * 8,
+      );
+      ctx.lineTo(
+        p2.x - Math.cos(ang + 0.55) * 8,
+        p2.y - Math.sin(ang + 0.55) * 8,
+      );
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (curLod <= 2) {
+      for (const hub of agg.hubList) {
+        const pt = map.project([hub.lon, hub.lat]);
+        const dimmed =
+          !!selLoc &&
+          selLoc.key !== hub.key &&
+          !selLoc.connectedList.includes(hub.key);
+
+        const col = dimmed ? "#475569" : "#22d3ee";
+        const pillarH = tilt3D
+          ? Math.min(82, Math.max(14, hub.metricVal * 1.35))
+          : 0;
+        const r = Math.min(13, 6 + Math.sqrt(Math.max(1, hub.metricVal)) * 1.2);
+
+        ctx.save();
+        ctx.globalAlpha = dimmed ? 0.32 : 0.92;
+
+        if (pillarH > 0) {
+          const grad = ctx.createLinearGradient(
+            pt.x,
+            pt.y - pillarH,
+            pt.x,
+            pt.y,
+          );
+          grad.addColorStop(0, col);
+          grad.addColorStop(1, "rgba(34, 211, 238, 0.12)");
+          ctx.fillStyle = grad;
+          ctx.fillRect(pt.x - 5, pt.y - pillarH, 10, pillarH);
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(pt.x - 5, pt.y - pillarH, 10, pillarH);
+        }
+
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y - pillarH, r * 0.65, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.shadowColor = col;
+        ctx.shadowBlur = dimmed ? 0 : 12;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#090e1c";
+        ctx.stroke();
+
+        const label = `${hub.name} (${hub.metricVal})`;
+        ctx.shadowBlur = 0;
+        ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#090e1c";
+        ctx.strokeText(label, pt.x, pt.y - pillarH - r * 0.65 - 6);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.fillText(label, pt.x, pt.y - pillarH - r * 0.65 - 6);
+        ctx.restore();
+      }
+    } else {
+      for (const p of pts) {
+        const pt = map.project([p.lon, p.lat]);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = EVENT_COLORS[p.type] || "#f472b6";
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#ffffff";
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }, []);
+
+  const pushCamHistory = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    historyRef.current.push({
+      center: map.getCenter(),
+      zoom: map.getZoom(),
+      pitch: map.getPitch(),
+      bearing: map.getBearing(),
+    });
+    if (historyRef.current.length > 12) historyRef.current.shift();
+    setCanGoBack(true);
+  }, []);
+
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return;
 
@@ -492,7 +674,6 @@ export default function GeoMap3D({ data }) {
       container: mapEl.current,
       style: {
         version: 8,
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
         sources: {
           "osm-dark": {
             type: "raster",
@@ -522,146 +703,62 @@ export default function GeoMap3D({ data }) {
     });
 
     mapRef.current = map;
-    popupRef.current = new MapPopup({
-      closeButton: false,
-      closeOnClick: false,
+
+    const hitTest = (px, py) => {
+      const { aggregated: agg, lod: curLod, is3D: tilt3D } = stateRef.current;
+      if (!agg) return null;
+
+      if (curLod <= 2) {
+        for (const hub of agg.hubList) {
+          const pt = map.project([hub.lon, hub.lat]);
+          const pillarH = tilt3D
+            ? Math.min(82, Math.max(14, hub.metricVal * 1.35))
+            : 0;
+          if (
+            Math.hypot(px - pt.x, py - pt.y) < 16 ||
+            Math.hypot(px - pt.x, py - (pt.y - pillarH)) < 16
+          ) {
+            return { kind: "hub", item: hub };
+          }
+        }
+      }
+
+      for (const r of agg.routeList) {
+        const screenPts = r.coords.map((c) => map.project(c));
+        if (screenPts.length < 2) continue;
+        const start = screenPts[0];
+        const end = screenPts[screenPts.length - 1];
+        const pxDist = Math.hypot(end.x - start.x, end.y - start.y);
+        const maxLift = tilt3D ? Math.min(44, pxDist * 0.16) : 0;
+        const lifted = screenPts.map((pt, idx) => {
+          const t = idx / (screenPts.length - 1);
+          return { x: pt.x, y: pt.y - Math.sin(t * Math.PI) * maxLift };
+        });
+        for (let i = 0; i < lifted.length - 1; i++) {
+          if (
+            distToSegment(
+              px,
+              py,
+              lifted[i].x,
+              lifted[i].y,
+              lifted[i + 1].x,
+              lifted[i + 1].y,
+            ) < 10
+          ) {
+            return { kind: "arc", item: r };
+          }
+        }
+      }
+      return null;
+    };
+
+    map.on("style.load", drawOverlay);
+    map.on("render", drawOverlay);
+    map.on("move", () => {
+      setHoverInfo(null);
+      drawOverlay();
     });
-
-    map.on("load", () => {
-      map.addSource("hub-pillars", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
-      map.addSource("hub-points", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
-      map.addSource("agg-arcs", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
-      map.addSource("ind-points", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-        cluster: true,
-        clusterMaxZoom: 11,
-        clusterRadius: 42,
-      });
-
-      map.addLayer({
-        id: "hub-pillars-3d",
-        type: "fill-extrusion",
-        source: "hub-pillars",
-        paint: {
-          "fill-extrusion-color": [
-            "case",
-            ["boolean", ["get", "dimmed"], false],
-            "#334155",
-            "#22d3ee",
-          ],
-          "fill-extrusion-height": ["get", "height"],
-          "fill-extrusion-base": 0,
-          "fill-extrusion-opacity": 0.58,
-        },
-      });
-
-      map.addLayer({
-        id: "agg-arcs-layer",
-        type: "line",
-        source: "agg-arcs",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-color": "#f472b6",
-          "line-width": 3.5,
-          "line-opacity": 0.9,
-        },
-      });
-
-      map.addLayer({
-        id: "hub-points-layer",
-        type: "circle",
-        source: "hub-points",
-        paint: {
-          "circle-radius": ["get", "radius"],
-          "circle-color": [
-            "case",
-            ["boolean", ["get", "dimmed"], false],
-            "#475569",
-            "#22d3ee",
-          ],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#090e1c",
-        },
-      });
-
-      map.addLayer({
-        id: "hub-labels-layer",
-        type: "symbol",
-        source: "hub-points",
-        layout: {
-          "text-field": ["get", "label"],
-          "text-size": 11,
-          "text-offset": [0, 1.5],
-          "text-anchor": "top",
-        },
-        paint: {
-          "text-color": "#e2e8f0",
-          "text-halo-color": "#090e1c",
-          "text-halo-width": 1.5,
-        },
-      });
-
-      map.addLayer({
-        id: "clusters-layer",
-        type: "circle",
-        source: "ind-points",
-        filter: ["has", "point_count"],
-        paint: {
-          "circle-color": "#38bdf8",
-          "circle-radius": [
-            "step",
-            ["get", "point_count"],
-            16,
-            25,
-            22,
-            100,
-            28,
-          ],
-          "circle-opacity": 0.85,
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#090e1c",
-        },
-      });
-
-      map.addLayer({
-        id: "cluster-count-layer",
-        type: "symbol",
-        source: "ind-points",
-        filter: ["has", "point_count"],
-        layout: {
-          "text-field": "{point_count_abbreviated}",
-          "text-size": 12,
-        },
-        paint: { "text-color": "#090e1c" },
-      });
-
-      map.addLayer({
-        id: "unclustered-points-layer",
-        type: "circle",
-        source: "ind-points",
-        filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-color": ["get", "color"],
-          "circle-radius": 6,
-          "circle-stroke-width": 1.5,
-          "circle-stroke-color": "#ffffff",
-        },
-      });
-
-      setZoomVal(Number(map.getZoom().toFixed(1)));
-      setLod(getLodLevel(map.getZoom()));
-      setMapReady(true);
-    });
+    map.on("resize", drawOverlay);
 
     map.on("zoomend", () => {
       const z = map.getZoom();
@@ -669,194 +766,53 @@ export default function GeoMap3D({ data }) {
       setLod(getLodLevel(z));
     });
 
+    map.on("mousemove", (e) => {
+      const hit = hitTest(e.point.x, e.point.y);
+      if (!hit) {
+        map.getCanvas().style.cursor = "";
+        setHoverInfo(null);
+        return;
+      }
+      map.getCanvas().style.cursor = "pointer";
+      setHoverInfo({
+        x: e.point.x,
+        y: e.point.y,
+        kind: hit.kind,
+        item: hit.item,
+      });
+    });
+
+    map.on("mouseout", () => setHoverInfo(null));
+
+    map.on("click", (e) => {
+      const hit = hitTest(e.point.x, e.point.y);
+      if (!hit) return;
+      if (hit.kind === "hub") {
+        setSelectedLoc(hit.item);
+        setSelectedArc(null);
+      } else if (hit.kind === "arc") {
+        setSelectedArc(hit.item);
+        setSelectedLoc(null);
+      }
+    });
+
     return () => {
       map.remove();
       mapRef.current = null;
-      setMapReady(false);
     };
-  }, []);
+  }, [drawOverlay]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || (!mapReady && !map.isStyleLoaded())) return;
-
-    const showHubs = lod <= 2;
-    const pillarRadius = lod === 1 ? 0.38 : 0.16;
-
-    const pillarFeatures = showHubs
-      ? aggregated.hubList.map((h) => ({
-          type: "Feature",
-          properties: {
-            key: h.key,
-            height: Math.min(280000, Math.max(20000, h.metricVal * 4200)),
-            dimmed:
-              !!selectedLoc &&
-              selectedLoc.key !== h.key &&
-              !selectedLoc.connectedList.includes(h.key),
-          },
-          geometry: {
-            type: "Polygon",
-            coordinates: makeHexPolygon(h.lon, h.lat, pillarRadius),
-          },
-        }))
-      : [];
-
-    const hubFeatures = showHubs
-      ? aggregated.hubList.map((h) => ({
-          type: "Feature",
-          properties: {
-            key: h.key,
-            label: `${h.name} (${h.metricVal})`,
-            radius: Math.min(18, 7 + Math.sqrt(h.metricVal) * 1.4),
-            dimmed:
-              !!selectedLoc &&
-              selectedLoc.key !== h.key &&
-              !selectedLoc.connectedList.includes(h.key),
-          },
-          geometry: { type: "Point", coordinates: [h.lon, h.lat] },
-        }))
-      : [];
-
-    const arcFeatures = aggregated.routeList.map((r) => {
-      const touchesSel =
-        selectedLoc &&
-        (r.srcKey === selectedLoc.key || r.dstKey === selectedLoc.key);
-      return {
-        type: "Feature",
-        properties: {
-          id: r.id,
-          srcName: r.srcName,
-          dstName: r.dstName,
-          count: r.count,
-          uniqueSuspects: r.uniqueSuspects,
-          categories: r.categoryList.join(", "),
-          width: Math.min(7, 1.5 + Math.log2(r.count + 1) * 1.2),
-          highlighted: !!touchesSel,
-          dimmed: !!selectedLoc && !touchesSel,
-        },
-        geometry: { type: "LineString", coordinates: r.coords },
-      };
-    });
-
-    const indFeatures =
-      lod >= 3
-        ? filteredPoints.map((p) => ({
-            type: "Feature",
-            properties: {
-              id: p.id,
-              suspect: p.suspect,
-              type: p.type,
-              city: p.city,
-              state: p.state,
-              timestamp: p.timestamp,
-              color: EVENT_COLORS[p.type] || "#f472b6",
-            },
-            geometry: { type: "Point", coordinates: [p.lon, p.lat] },
-          }))
-        : [];
-
-    map.getSource("hub-pillars")?.setData({
-      type: "FeatureCollection",
-      features: pillarFeatures,
-    });
-    map.getSource("hub-points")?.setData({
-      type: "FeatureCollection",
-      features: hubFeatures,
-    });
-    map.getSource("agg-arcs")?.setData({
-      type: "FeatureCollection",
-      features: arcFeatures,
-    });
-    map.getSource("ind-points")?.setData({
-      type: "FeatureCollection",
-      features: indFeatures,
-    });
-  }, [aggregated, filteredPoints, lod, selectedLoc, mapReady]);
-
-  const pushCamHistory = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    historyRef.current.push({
-      center: map.getCenter(),
-      zoom: map.getZoom(),
-      pitch: map.getPitch(),
-      bearing: map.getBearing(),
-    });
-    if (historyRef.current.length > 12) historyRef.current.shift();
-    setCanGoBack(true);
-  }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    const onArcMove = (e) => {
-      map.getCanvas().style.cursor = "pointer";
-      const f = e.features?.[0];
-      if (!f) return;
-      const p = f.properties;
-      popupRef.current
-        .setLngLat(e.lngLat)
-        .setHTML(
-          `<div style="font-size:12px;color:#0f172a">
-            <b>${p.srcName} → ${p.dstName}</b><br/>
-            ${p.count} connections · ${p.uniqueSuspects} suspect(s)<br/>
-            <span style="color:#475569">${p.categories}</span>
-          </div>`,
-        )
-        .addTo(map);
-    };
-
-    const onArcLeave = () => {
-      map.getCanvas().style.cursor = "";
-      popupRef.current?.remove();
-    };
-
-    const onArcClick = (e) => {
-      const id = e.features?.[0]?.properties?.id;
-      const found = aggregated.routeList.find((r) => r.id === id);
-      if (found) {
-        setSelectedArc(found);
-        setSelectedLoc(null);
-      }
-    };
-
-    const onHubClick = (e) => {
-      const key = e.features?.[0]?.properties?.key;
-      const found = aggregated.hubList.find((h) => h.key === key);
-      if (found) {
-        setSelectedLoc(found);
-        setSelectedArc(null);
-      }
-    };
-
-    const onClusterClick = (e) => {
-      const f = e.features?.[0];
-      if (!f) return;
-      const clusterId = f.properties.cluster_id;
-      map
-        .getSource("ind-points")
-        ?.getClusterExpansionZoom(clusterId, (err, z) => {
-          if (err) return;
-          pushCamHistory();
-          map.easeTo({ center: f.geometry.coordinates, zoom: z });
-        });
-    };
-
-    map.on("mousemove", "agg-arcs-layer", onArcMove);
-    map.on("mouseleave", "agg-arcs-layer", onArcLeave);
-    map.on("click", "agg-arcs-layer", onArcClick);
-    map.on("click", "hub-points-layer", onHubClick);
-    map.on("click", "clusters-layer", onClusterClick);
-
-    return () => {
-      map.off("mousemove", "agg-arcs-layer", onArcMove);
-      map.off("mouseleave", "agg-arcs-layer", onArcLeave);
-      map.off("click", "agg-arcs-layer", onArcClick);
-      map.off("click", "hub-points-layer", onHubClick);
-      map.off("click", "clusters-layer", onClusterClick);
-    };
-  }, [aggregated, mapReady, pushCamHistory]);
+    drawOverlay();
+  }, [
+    aggregated,
+    filteredPoints,
+    lod,
+    selectedLoc,
+    selectedArc,
+    is3D,
+    drawOverlay,
+  ]);
 
   const flyTo = (opts) => {
     pushCamHistory();
@@ -990,6 +946,95 @@ export default function GeoMap3D({ data }) {
         }}
       >
         <div ref={mapEl} style={{ width: "100%", height: "100%" }} />
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            pointerEvents: "none",
+            zIndex: 2,
+          }}
+        />
+
+        {hoverInfo && (
+          <div
+            style={{
+              position: "absolute",
+              left: Math.min(
+                hoverInfo.x + 14,
+                (mapEl.current?.clientWidth || 700) - 260,
+              ),
+              top: Math.max(12, hoverInfo.y - 16),
+              transform: "translateY(-100%)",
+              zIndex: 25,
+              pointerEvents: "none",
+              minWidth: 210,
+              maxWidth: 260,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "rgba(6, 10, 20, 0.96)",
+              border:
+                hoverInfo.kind === "arc"
+                  ? "1px solid rgba(244, 114, 182, 0.55)"
+                  : "1px solid rgba(34, 211, 238, 0.55)",
+              boxShadow: "0 10px 26px rgba(0, 0, 0, 0.75)",
+              color: "#e2e8f0",
+              fontSize: 12,
+              lineHeight: 1.45,
+            }}
+          >
+            {hoverInfo.kind === "hub" ? (
+              <>
+                <div
+                  style={{ color: "#22d3ee", fontWeight: 700, fontSize: 13 }}
+                >
+                  {hoverInfo.item.name}
+                  {hoverInfo.item.state !== hoverInfo.item.name
+                    ? `, ${hoverInfo.item.state}`
+                    : ""}
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <b>{hoverInfo.item.suspectCount}</b> suspect(s) ·{" "}
+                  <b>{hoverInfo.item.count}</b> activity events
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: 11 }}>
+                  In: {hoverInfo.item.inCount} · Out: {hoverInfo.item.outCount}{" "}
+                  · {hoverInfo.item.connectedList.length} linked hub(s)
+                </div>
+                {hoverInfo.item.connectedList.length > 0 && (
+                  <div style={{ color: "#cbd5e1", fontSize: 11, marginTop: 3 }}>
+                    Links: {hoverInfo.item.connectedList.slice(0, 4).join(", ")}
+                    {hoverInfo.item.connectedList.length > 4 ? "…" : ""}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div
+                  style={{ color: "#f472b6", fontWeight: 700, fontSize: 13 }}
+                >
+                  {hoverInfo.item.srcName} → {hoverInfo.item.dstName}
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <b>{hoverInfo.item.count}</b> connections ·{" "}
+                  <b>{hoverInfo.item.uniqueSuspects}</b> suspect(s)
+                </div>
+                <div style={{ color: "#22d3ee", fontSize: 11 }}>
+                  {hoverInfo.item.categoryList.join(", ")}
+                </div>
+                {hoverInfo.item.suspectList?.length > 0 && (
+                  <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 3 }}>
+                    Entities:{" "}
+                    {hoverInfo.item.suspectList.slice(0, 3).join(", ")}
+                    {hoverInfo.item.suspectList.length > 3 ? "…" : ""}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         <div
           style={{

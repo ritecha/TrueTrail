@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-export const API = "https://digitalevidencebytruetrail-backend.onrender.com";
+export const API =
+  import.meta.env.VITE_API_URL ||
+  "https://digitalevidencebytruetrail-backend.onrender.com";
+
 export default function Ledger({ refreshKey }) {
   const [rows, setRows] = useState([]);
   const [offline, setOffline] = useState(false);
